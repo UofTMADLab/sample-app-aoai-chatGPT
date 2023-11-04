@@ -3,22 +3,110 @@ import os
 import logging
 import requests
 import openai
+import pprint
 from azure.identity import DefaultAzureCredential
-from flask import Flask, Response, request, jsonify, send_from_directory
+from flask import Flask, Response, request, jsonify, send_from_directory, redirect, url_for
+from flask_caching import Cache
 from dotenv import load_dotenv
 
 from backend.auth.auth_utils import get_authenticated_user_details
 from backend.history.cosmosdbservice import CosmosConversationClient
 
+from werkzeug.exceptions import Forbidden
+from pylti1p3.contrib.flask import FlaskOIDCLogin, FlaskMessageLaunch, FlaskRequest, FlaskCacheDataStorage
+from pylti1p3.deep_link_resource import DeepLinkResource
+from pylti1p3.grade import Grade
+from pylti1p3.lineitem import LineItem
+from pylti1p3.tool_config import ToolConfJsonFile
+from pylti1p3.registration import Registration
+
 load_dotenv()
 
 app = Flask(__name__, static_folder="static")
+cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 
+# class ExtendedFlaskMessageLaunch(FlaskMessageLaunch):
+# 
+#     def validate_nonce(self):
+#         """
+#         Probably it is bug on "https://lti-ri.imsglobal.org":
+#         site passes invalid "nonce" value during deep links launch.
+#         Because of this in case of iss == http://imsglobal.org just skip nonce validation.
+#     
+#         """
+#         iss = self.get_iss()
+#         deep_link_launch = self.is_deep_link_launch()
+#         if iss == "http://imsglobal.org" and deep_link_launch:
+#             return self
+#         return super().validate_nonce()
+
+
+def get_lti_config_path():
+    return os.path.join(app.root_path, 'lti', 'config', 'tool-conf.json')
+
+def get_launch_data_storage():
+    return FlaskCacheDataStorage(cache)
+    
 # Static Files
-@app.route("/")
-def index():
+@app.route('/<launch_id>/', methods=['GET'])
+def index(launch_id):
+    tool_conf = ToolConfJsonFile(get_lti_config_path())
+    flask_request = FlaskRequest()
+    launch_data_storage = get_launch_data_storage()
+    message_launch = FlaskMessageLaunch.from_cache(launch_id, flask_request, tool_conf,
+                                                           launch_data_storage=launch_data_storage)
+    if not message_launch:
+        raise Forbidden('Not authorized.')
     return app.send_static_file("index.html")
+    
+@app.route('/jwks/', methods=['GET'])
+def get_jwks():
+    tool_conf = ToolConfJsonFile(get_lti_config_path())
+    return jsonify(tool_conf.get_jwks())
 
+@app.route('/login/', methods=['GET', 'POST'])
+def login():
+    tool_conf = ToolConfJsonFile(get_lti_config_path())
+    launch_data_storage = get_launch_data_storage()
+
+    flask_request = FlaskRequest()
+    target_link_uri = flask_request.get_param('target_link_uri')
+    if not target_link_uri:
+        raise Exception('Missing "target_link_uri" param')
+
+    oidc_login = FlaskOIDCLogin(flask_request, tool_conf, launch_data_storage=launch_data_storage)
+    return oidc_login\
+        .enable_check_cookies()\
+        .redirect(target_link_uri)
+
+
+@app.route('/launch/', methods=['POST'])
+def launch():
+    tool_conf = ToolConfJsonFile(get_lti_config_path())
+    flask_request = FlaskRequest()
+    launch_data_storage = get_launch_data_storage()
+    message_launch = FlaskMessageLaunch(flask_request, tool_conf, launch_data_storage=launch_data_storage)
+    launch_id = message_launch.get_launch_id()
+    message_launch_data = message_launch.get_launch_data()
+    pprint.pprint(message_launch_data)
+
+    # difficulty = message_launch_data.get('https://purl.imsglobal.org/spec/lti/claim/custom', {}) \
+    #     .get('difficulty', None)
+    # if not difficulty:
+    #     difficulty = request.args.get('difficulty', 'normal')
+
+    # tpl_kwargs = {
+    #     'page_title': 'PAGE_TITLE',
+    #     'is_deep_link_launch': message_launch.is_deep_link_launch(),
+    #     'launch_data': message_launch.get_launch_data(),
+    #     'launch_id': message_launch.get_launch_id(),
+    #     'curr_user_name': message_launch_data.get('name', '')
+    #     # 'curr_diff': difficulty
+    # }
+    # return render_template('game.html', **tpl_kwargs)
+    # return app.send_static_file("index.html")
+    return redirect(url_for('index', launch_id=launch_id))
+        
 @app.route("/favicon.ico")
 def favicon():
     return app.send_static_file('favicon.ico')
