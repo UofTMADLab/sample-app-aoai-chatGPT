@@ -1,3 +1,8 @@
+export type LtiUserInfo = {
+    name: string;
+    course: string;
+}
+
 export type AskResponse = {
     answer: string;
     citations: Citation[];

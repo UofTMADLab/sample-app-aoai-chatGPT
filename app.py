@@ -47,16 +47,26 @@ def get_lti_config_path():
 def get_launch_data_storage():
     return FlaskCacheDataStorage(cache)
     
-# Static Files
-@app.route('/<launch_id>/', methods=['GET'])
-def index(launch_id):
+def get_message_launch():
+    launch_id = request.cookies.get('launch_id')
+    app.logger.info(pprint.pformat(launch_id))
     tool_conf = ToolConfJsonFile(get_lti_config_path())
     flask_request = FlaskRequest()
     launch_data_storage = get_launch_data_storage()
-    message_launch = FlaskMessageLaunch.from_cache(launch_id, flask_request, tool_conf,
-                                                           launch_data_storage=launch_data_storage)
+    return FlaskMessageLaunch.from_cache(launch_id, flask_request, tool_conf,
+                                                launch_data_storage=launch_data_storage)
+                                                           
+    
+# Static Files
+@app.route('/', methods=['GET'])
+def index():
+
+    message_launch = get_message_launch()
     if not message_launch:
         raise Forbidden('Not authorized.')
+    
+    # resp = app.send_static_file("index.html")
+    # resp.set_cookie('launch_id', launch_id)
     return app.send_static_file("index.html")
     
 @app.route('/jwks/', methods=['GET'])
@@ -88,7 +98,7 @@ def launch():
     message_launch = FlaskMessageLaunch(flask_request, tool_conf, launch_data_storage=launch_data_storage)
     launch_id = message_launch.get_launch_id()
     message_launch_data = message_launch.get_launch_data()
-    pprint.pprint(message_launch_data)
+    app.logger.info(pprint.pformat(message_launch_data))
 
     # difficulty = message_launch_data.get('https://purl.imsglobal.org/spec/lti/claim/custom', {}) \
     #     .get('difficulty', None)
@@ -105,8 +115,24 @@ def launch():
     # }
     # return render_template('game.html', **tpl_kwargs)
     # return app.send_static_file("index.html")
-    return redirect(url_for('index', launch_id=launch_id))
+    resp = redirect(url_for('index'))
+    resp.set_cookie('launch_id', launch_id)
+    return resp
         
+@app.route("/lti/me")
+def lti_id():
+    message_launch = get_message_launch()
+    if not message_launch:
+        raise Forbidden('Not authorized.')
+        
+    message_launch_data = message_launch.get_launch_data()
+    name = message_launch_data.get('https://purl.imsglobal.org/spec/lti/claim/custom', {}).get('name', None)
+    course = message_launch_data.get('https://purl.imsglobal.org/spec/lti/claim/context', {}).get('title', None)
+    app.logger.info(pprint.pformat(message_launch_data))
+    app.logger.info(name)
+    app.logger.info(course)
+    return jsonify([{'name':name, 'course':course}]), 200
+    
 @app.route("/favicon.ico")
 def favicon():
     return app.send_static_file('favicon.ico')

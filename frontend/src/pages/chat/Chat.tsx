@@ -18,6 +18,7 @@ import {
     Citation,
     ToolMessageContent,
     ChatResponse,
+    getLtiUserInfo,
     getUserInfo,
     Conversation,
     historyGenerate,
@@ -94,6 +95,12 @@ const Chat = () => {
         else {
             setShowAuthMessage(false);
         }
+    }
+    
+    const getLtiUserInfoList = async() => {
+        const ltiUserInfoList = await getLtiUserInfo()
+        console.log(ltiUserInfoList)
+        appStateContext?.dispatch({ type: 'LTI_USER_INFO', payload: ltiUserInfoList[0] });
     }
 
     const makeApiRequestWithoutCosmosDB = async (question: string, conversationId?: string) => {
@@ -497,6 +504,10 @@ const Chat = () => {
     useEffect(() => {
         getUserInfoList();
     }, []);
+    
+    useEffect(() => {
+        getLtiUserInfoList();
+    }, []);
 
     useLayoutEffect(() => {
         chatMessageStreamEnd.current?.scrollIntoView({ behavior: "smooth" })
@@ -556,7 +567,8 @@ const Chat = () => {
                                     aria-hidden="true"
                                     style={{height: "300px", width: "900px"}}
                                 />
-                                <h1 className={styles.chatEmptyStateTitle}>Start chatting</h1>
+                                <h1 className={styles.chatEmptyStateTitle}>{appStateContext?.state.ltiUserInfo?.name}</h1>
+                                <h1 className={styles.chatEmptyStateSubtitle}>{appStateContext?.state.ltiUserInfo?.course}</h1>
                                 <h2 className={styles.chatEmptyStateSubtitle}>The University of Toronto Chatbot is Ready to Answer Your Questions</h2>
                             </Stack>
                         ) : (

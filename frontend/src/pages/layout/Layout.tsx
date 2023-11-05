@@ -80,7 +80,7 @@ const Layout = () => {
                         />
                         <Link to="/" className={styles.headerTitleContainer}>
                             <h1 className={styles.headerTitle}>Azure AI</h1>
-                        </Link>
+                        </Link>                        
                     </Stack>
                     <Stack horizontal tokens={{ childrenGap: 4 }}>
                             {(appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured) && 

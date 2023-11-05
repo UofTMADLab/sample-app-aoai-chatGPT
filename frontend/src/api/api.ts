@@ -1,4 +1,4 @@
-import { UserInfo, ConversationRequest, Conversation, ChatMessage, CosmosDBHealth, CosmosDBStatus } from "./models";
+import { UserInfo, ConversationRequest, Conversation, ChatMessage, CosmosDBHealth, CosmosDBStatus, LtiUserInfo } from "./models";
 import { chatHistorySampleData } from "../constants/chatHistory";
 
 export async function conversationApi(options: ConversationRequest, abortSignal: AbortSignal): Promise<Response> {
@@ -14,6 +14,16 @@ export async function conversationApi(options: ConversationRequest, abortSignal:
     });
 
     return response;
+}
+
+export async function getLtiUserInfo(): Promise<LtiUserInfo[]> {
+    const response = await fetch('/lti/me');
+    if (!response.ok) {
+        console.log("LTI information not given.")
+        return [];
+    }
+    const payload = await response.json();
+    return payload;
 }
 
 export async function getUserInfo(): Promise<UserInfo[]> {
