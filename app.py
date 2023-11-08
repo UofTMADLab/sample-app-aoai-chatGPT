@@ -20,29 +20,29 @@ from pylti1p3.lineitem import LineItem
 from pylti1p3.tool_config import ToolConfJsonFile
 from pylti1p3.registration import Registration
 
+    
 load_dotenv()
 
 app = Flask(__name__, static_folder="static")
 cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 
-# class ExtendedFlaskMessageLaunch(FlaskMessageLaunch):
-# 
-#     def validate_nonce(self):
-#         """
-#         Probably it is bug on "https://lti-ri.imsglobal.org":
-#         site passes invalid "nonce" value during deep links launch.
-#         Because of this in case of iss == http://imsglobal.org just skip nonce validation.
-#     
-#         """
-#         iss = self.get_iss()
-#         deep_link_launch = self.is_deep_link_launch()
-#         if iss == "http://imsglobal.org" and deep_link_launch:
-#             return self
-#         return super().validate_nonce()
+def get_lti_context_config_path():
+    return os.path.join(app.root_path, 'lti', 'course-config', 'course-env.json')
+
+def load_lti_course_config(path):
+    f = open(path)
+    data = json.load(f)
+    f.close()
+    return data
+
+lti_course_config = load_lti_course_config(get_lti_context_config_path())
 
 
 def get_lti_config_path():
     return os.path.join(app.root_path, 'lti', 'config', 'tool-conf.json')
+def get_lti_context_config_path():
+    return os.path.join(app.root_path, 'lti', 'course-config', 'course-env.json')
+
 
 def get_launch_data_storage():
     return FlaskCacheDataStorage(cache)
@@ -55,7 +55,29 @@ def get_message_launch():
     launch_data_storage = get_launch_data_storage()
     return FlaskMessageLaunch.from_cache(launch_id, flask_request, tool_conf,
                                                 launch_data_storage=launch_data_storage)
-                                                           
+
+
+def get_lti_context(launch_data):
+    return launch_data.get('https://purl.imsglobal.org/spec/lti/claim/context', {}).get('id', None)
+
+def set_lti_context_globals(context):
+    global AZURE_SEARCH_SERVICE
+    global AZURE_SEARCH_INDEX
+    global AZURE_SEARCH_KEY
+    global AZURE_OPENAI_RESOURCE
+    global AZURE_OPENAI_MODEL
+    global AZURE_OPENAI_SYSTEM_MESSAGE 
+    
+    context_data = lti_course_config.get(context, lti_course_config['default'])
+
+    
+    AZURE_SEARCH_SERVICE = context_data.get('AZURE_SEARCH_SERVICE', None)
+    AZURE_SEARCH_INDEX = context_data.get('AZURE_SEARCH_INDEX', None)
+    AZURE_SEARCH_KEY = context_data.get('AZURE_SEARCH_KEY', None)
+    AZURE_OPENAI_RESOURCE = context_data.get('AZURE_OPENAI_RESOURCE', None)
+    AZURE_OPENAI_MODEL = context_data.get('AZURE_OPENAI_MODEL', None)
+    AZURE_OPENAI_SYSTEM_MESSAGE = context_data.get('AZURE_OPENAI_SYSTEM_MESSAGE', None)
+    
     
 # Static Files
 @app.route('/', methods=['GET'])
@@ -132,6 +154,7 @@ def lti_id():
     app.logger.info(name)
     app.logger.info(course)
     return jsonify([{'name':name, 'course':course}]), 200
+
     
 @app.route("/favicon.ico")
 def favicon():
@@ -143,9 +166,9 @@ def assets(path):
 
 
 # ACS Integration Settings
-AZURE_SEARCH_SERVICE = os.environ.get("AZURE_SEARCH_SERVICE")
-AZURE_SEARCH_INDEX = os.environ.get("AZURE_SEARCH_INDEX")
-AZURE_SEARCH_KEY = os.environ.get("AZURE_SEARCH_KEY")
+# AZURE_SEARCH_SERVICE = os.environ.get("AZURE_SEARCH_SERVICE")
+# AZURE_SEARCH_INDEX = os.environ.get("AZURE_SEARCH_INDEX")
+# AZURE_SEARCH_KEY = os.environ.get("AZURE_SEARCH_KEY")
 AZURE_SEARCH_USE_SEMANTIC_SEARCH = os.environ.get("AZURE_SEARCH_USE_SEMANTIC_SEARCH", "false")
 AZURE_SEARCH_SEMANTIC_SEARCH_CONFIG = os.environ.get("AZURE_SEARCH_SEMANTIC_SEARCH_CONFIG", "default")
 AZURE_SEARCH_TOP_K = os.environ.get("AZURE_SEARCH_TOP_K", 5)
@@ -160,8 +183,8 @@ AZURE_SEARCH_PERMITTED_GROUPS_COLUMN = os.environ.get("AZURE_SEARCH_PERMITTED_GR
 AZURE_SEARCH_STRICTNESS = os.environ.get("AZURE_SEARCH_STRICTNESS", 3)
 
 # AOAI Integration Settings
-AZURE_OPENAI_RESOURCE = os.environ.get("AZURE_OPENAI_RESOURCE")
-AZURE_OPENAI_MODEL = os.environ.get("AZURE_OPENAI_MODEL")
+# AZURE_OPENAI_RESOURCE = os.environ.get("AZURE_OPENAI_RESOURCE")
+# AZURE_OPENAI_MODEL = os.environ.get("AZURE_OPENAI_MODEL")
 AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_KEY = os.environ.get("AZURE_OPENAI_KEY")
 AZURE_OPENAI_TEMPERATURE = os.environ.get("AZURE_OPENAI_TEMPERATURE", 0)
@@ -176,6 +199,7 @@ AZURE_OPENAI_EMBEDDING_ENDPOINT = os.environ.get("AZURE_OPENAI_EMBEDDING_ENDPOIN
 AZURE_OPENAI_EMBEDDING_KEY = os.environ.get("AZURE_OPENAI_EMBEDDING_KEY")
 AZURE_OPENAI_EMBEDDING_NAME = os.environ.get("AZURE_OPENAI_EMBEDDING_NAME", "")
 
+# AZURE_OPENAI_SYSTEM_MESSAGE = "You are an AI assistant at the University of Toronto that helps undergraduate students with human physiology lecture material. Students may ask you to produce information in sentences, creating lists, or by creating sample quiz questions. Answers provided should be in friendly, simple language and not exceed 400 words."
 
 SHOULD_STREAM = True if AZURE_OPENAI_STREAM.lower() == "true" else False
 
@@ -550,6 +574,13 @@ def conversation_without_data(request_body):
 
 @app.route("/conversation", methods=["GET", "POST"])
 def conversation():
+    message_launch = get_message_launch()
+    if not message_launch:
+        raise Forbidden('Not authorized.')
+        
+    message_launch_data = message_launch.get_launch_data()
+    lti_context =  get_lti_context(message_launch_data)
+    set_lti_context_globals(lti_context)
     request_body = request.json
     return conversation_internal(request_body)
 
@@ -564,231 +595,231 @@ def conversation_internal(request_body):
         logging.exception("Exception in /conversation")
         return jsonify({"error": str(e)}), 500
 
-## Conversation History API ## 
-@app.route("/history/generate", methods=["POST"])
-def add_conversation():
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
-    user_id = authenticated_user['user_principal_id']
-
-    ## check request for conversation_id
-    conversation_id = request.json.get("conversation_id", None)
-
-    try:
-        # make sure cosmos is configured
-        if not cosmos_conversation_client:
-            raise Exception("CosmosDB is not configured")
-
-        # check for the conversation_id, if the conversation is not set, we will create a new one
-        history_metadata = {}
-        if not conversation_id:
-            title = generate_title(request.json["messages"])
-            conversation_dict = cosmos_conversation_client.create_conversation(user_id=user_id, title=title)
-            conversation_id = conversation_dict['id']
-            history_metadata['title'] = title
-            history_metadata['date'] = conversation_dict['createdAt']
-            
-        ## Format the incoming message object in the "chat/completions" messages format
-        ## then write it to the conversation history in cosmos
-        messages = request.json["messages"]
-        if len(messages) > 0 and messages[-1]['role'] == "user":
-            cosmos_conversation_client.create_message(
-                conversation_id=conversation_id,
-                user_id=user_id,
-                input_message=messages[-1]
-            )
-        else:
-            raise Exception("No user message found")
-        
-        # Submit request to Chat Completions for response
-        request_body = request.json
-        history_metadata['conversation_id'] = conversation_id
-        request_body['history_metadata'] = history_metadata
-        return conversation_internal(request_body)
-       
-    except Exception as e:
-        logging.exception("Exception in /history/generate")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/history/update", methods=["POST"])
-def update_conversation():
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
-    user_id = authenticated_user['user_principal_id']
-
-    ## check request for conversation_id
-    conversation_id = request.json.get("conversation_id", None)
-
-    try:
-        # make sure cosmos is configured
-        if not cosmos_conversation_client:
-            raise Exception("CosmosDB is not configured")
-
-        # check for the conversation_id, if the conversation is not set, we will create a new one
-        if not conversation_id:
-            raise Exception("No conversation_id found")
-            
-        ## Format the incoming message object in the "chat/completions" messages format
-        ## then write it to the conversation history in cosmos
-        messages = request.json["messages"]
-        if len(messages) > 0 and messages[-1]['role'] == "assistant":
-            if len(messages) > 1 and messages[-2]['role'] == "tool":
-                # write the tool message first
-                cosmos_conversation_client.create_message(
-                    conversation_id=conversation_id,
-                    user_id=user_id,
-                    input_message=messages[-2]
-                )
-            # write the assistant message
-            cosmos_conversation_client.create_message(
-                conversation_id=conversation_id,
-                user_id=user_id,
-                input_message=messages[-1]
-            )
-        else:
-            raise Exception("No bot messages found")
-        
-        # Submit request to Chat Completions for response
-        response = {'success': True}
-        return jsonify(response), 200
-       
-    except Exception as e:
-        logging.exception("Exception in /history/update")
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/history/delete", methods=["DELETE"])
-def delete_conversation():
-    ## get the user id from the request headers
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
-    user_id = authenticated_user['user_principal_id']
-    
-    ## check request for conversation_id
-    conversation_id = request.json.get("conversation_id", None)
-    try: 
-        if not conversation_id:
-            return jsonify({"error": "conversation_id is required"}), 400
-        
-        ## delete the conversation messages from cosmos first
-        deleted_messages = cosmos_conversation_client.delete_messages(conversation_id, user_id)
-
-        ## Now delete the conversation 
-        deleted_conversation = cosmos_conversation_client.delete_conversation(user_id, conversation_id)
-
-        return jsonify({"message": "Successfully deleted conversation and messages", "conversation_id": conversation_id}), 200
-    except Exception as e:
-        logging.exception("Exception in /history/delete")
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/history/list", methods=["GET"])
-def list_conversations():
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
-    user_id = authenticated_user['user_principal_id']
-
-    ## get the conversations from cosmos
-    conversations = cosmos_conversation_client.get_conversations(user_id)
-    if not isinstance(conversations, list):
-        return jsonify({"error": f"No conversations for {user_id} were found"}), 404
-
-    ## return the conversation ids
-
-    return jsonify(conversations), 200
-
-@app.route("/history/read", methods=["POST"])
-def get_conversation():
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
-    user_id = authenticated_user['user_principal_id']
-
-    ## check request for conversation_id
-    conversation_id = request.json.get("conversation_id", None)
-    
-    if not conversation_id:
-        return jsonify({"error": "conversation_id is required"}), 400
-
-    ## get the conversation object and the related messages from cosmos
-    conversation = cosmos_conversation_client.get_conversation(user_id, conversation_id)
-    ## return the conversation id and the messages in the bot frontend format
-    if not conversation:
-        return jsonify({"error": f"Conversation {conversation_id} was not found. It either does not exist or the logged in user does not have access to it."}), 404
-    
-    # get the messages for the conversation from cosmos
-    conversation_messages = cosmos_conversation_client.get_messages(user_id, conversation_id)
-
-    ## format the messages in the bot frontend format
-    messages = [{'id': msg['id'], 'role': msg['role'], 'content': msg['content'], 'createdAt': msg['createdAt']} for msg in conversation_messages]
-
-    return jsonify({"conversation_id": conversation_id, "messages": messages}), 200
-
-@app.route("/history/rename", methods=["POST"])
-def rename_conversation():
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
-    user_id = authenticated_user['user_principal_id']
-
-    ## check request for conversation_id
-    conversation_id = request.json.get("conversation_id", None)
-    
-    if not conversation_id:
-        return jsonify({"error": "conversation_id is required"}), 400
-    
-    ## get the conversation from cosmos
-    conversation = cosmos_conversation_client.get_conversation(user_id, conversation_id)
-    if not conversation:
-        return jsonify({"error": f"Conversation {conversation_id} was not found. It either does not exist or the logged in user does not have access to it."}), 404
-
-    ## update the title
-    title = request.json.get("title", None)
-    if not title:
-        return jsonify({"error": "title is required"}), 400
-    conversation['title'] = title
-    updated_conversation = cosmos_conversation_client.upsert_conversation(conversation)
-
-    return jsonify(updated_conversation), 200
-
-@app.route("/history/delete_all", methods=["DELETE"])
-def delete_all_conversations():
-    ## get the user id from the request headers
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
-    user_id = authenticated_user['user_principal_id']
-
-    # get conversations for user
-    try:
-        conversations = cosmos_conversation_client.get_conversations(user_id)
-        if not conversations:
-            return jsonify({"error": f"No conversations for {user_id} were found"}), 404
-        
-        # delete each conversation
-        for conversation in conversations:
-            ## delete the conversation messages from cosmos first
-            deleted_messages = cosmos_conversation_client.delete_messages(conversation['id'], user_id)
-
-            ## Now delete the conversation 
-            deleted_conversation = cosmos_conversation_client.delete_conversation(user_id, conversation['id'])
-
-        return jsonify({"message": f"Successfully deleted conversation and messages for user {user_id}"}), 200
-    
-    except Exception as e:
-        logging.exception("Exception in /history/delete_all")
-        return jsonify({"error": str(e)}), 500
-    
-
-@app.route("/history/clear", methods=["POST"])
-def clear_messages():
-    ## get the user id from the request headers
-    authenticated_user = get_authenticated_user_details(request_headers=request.headers)
-    user_id = authenticated_user['user_principal_id']
-    
-    ## check request for conversation_id
-    conversation_id = request.json.get("conversation_id", None)
-    try: 
-        if not conversation_id:
-            return jsonify({"error": "conversation_id is required"}), 400
-        
-        ## delete the conversation messages from cosmos
-        deleted_messages = cosmos_conversation_client.delete_messages(conversation_id, user_id)
-
-        return jsonify({"message": "Successfully deleted messages in conversation", "conversation_id": conversation_id}), 200
-    except Exception as e:
-        logging.exception("Exception in /history/clear_messages")
-        return jsonify({"error": str(e)}), 500
-
+# ## Conversation History API ## 
+# @app.route("/history/generate", methods=["POST"])
+# def add_conversation():
+#     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+#     user_id = authenticated_user['user_principal_id']
+# 
+#     ## check request for conversation_id
+#     conversation_id = request.json.get("conversation_id", None)
+# 
+#     try:
+#         # make sure cosmos is configured
+#         if not cosmos_conversation_client:
+#             raise Exception("CosmosDB is not configured")
+# 
+#         # check for the conversation_id, if the conversation is not set, we will create a new one
+#         history_metadata = {}
+#         if not conversation_id:
+#             title = generate_title(request.json["messages"])
+#             conversation_dict = cosmos_conversation_client.create_conversation(user_id=user_id, title=title)
+#             conversation_id = conversation_dict['id']
+#             history_metadata['title'] = title
+#             history_metadata['date'] = conversation_dict['createdAt']
+#             
+#         ## Format the incoming message object in the "chat/completions" messages format
+#         ## then write it to the conversation history in cosmos
+#         messages = request.json["messages"]
+#         if len(messages) > 0 and messages[-1]['role'] == "user":
+#             cosmos_conversation_client.create_message(
+#                 conversation_id=conversation_id,
+#                 user_id=user_id,
+#                 input_message=messages[-1]
+#             )
+#         else:
+#             raise Exception("No user message found")
+#         
+#         # Submit request to Chat Completions for response
+#         request_body = request.json
+#         history_metadata['conversation_id'] = conversation_id
+#         request_body['history_metadata'] = history_metadata
+#         return conversation_internal(request_body)
+#        
+#     except Exception as e:
+#         logging.exception("Exception in /history/generate")
+#         return jsonify({"error": str(e)}), 500
+# 
+# 
+# @app.route("/history/update", methods=["POST"])
+# def update_conversation():
+#     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+#     user_id = authenticated_user['user_principal_id']
+# 
+#     ## check request for conversation_id
+#     conversation_id = request.json.get("conversation_id", None)
+# 
+#     try:
+#         # make sure cosmos is configured
+#         if not cosmos_conversation_client:
+#             raise Exception("CosmosDB is not configured")
+# 
+#         # check for the conversation_id, if the conversation is not set, we will create a new one
+#         if not conversation_id:
+#             raise Exception("No conversation_id found")
+#             
+#         ## Format the incoming message object in the "chat/completions" messages format
+#         ## then write it to the conversation history in cosmos
+#         messages = request.json["messages"]
+#         if len(messages) > 0 and messages[-1]['role'] == "assistant":
+#             if len(messages) > 1 and messages[-2]['role'] == "tool":
+#                 # write the tool message first
+#                 cosmos_conversation_client.create_message(
+#                     conversation_id=conversation_id,
+#                     user_id=user_id,
+#                     input_message=messages[-2]
+#                 )
+#             # write the assistant message
+#             cosmos_conversation_client.create_message(
+#                 conversation_id=conversation_id,
+#                 user_id=user_id,
+#                 input_message=messages[-1]
+#             )
+#         else:
+#             raise Exception("No bot messages found")
+#         
+#         # Submit request to Chat Completions for response
+#         response = {'success': True}
+#         return jsonify(response), 200
+#        
+#     except Exception as e:
+#         logging.exception("Exception in /history/update")
+#         return jsonify({"error": str(e)}), 500
+# 
+# @app.route("/history/delete", methods=["DELETE"])
+# def delete_conversation():
+#     ## get the user id from the request headers
+#     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+#     user_id = authenticated_user['user_principal_id']
+#     
+#     ## check request for conversation_id
+#     conversation_id = request.json.get("conversation_id", None)
+#     try: 
+#         if not conversation_id:
+#             return jsonify({"error": "conversation_id is required"}), 400
+#         
+#         ## delete the conversation messages from cosmos first
+#         deleted_messages = cosmos_conversation_client.delete_messages(conversation_id, user_id)
+# 
+#         ## Now delete the conversation 
+#         deleted_conversation = cosmos_conversation_client.delete_conversation(user_id, conversation_id)
+# 
+#         return jsonify({"message": "Successfully deleted conversation and messages", "conversation_id": conversation_id}), 200
+#     except Exception as e:
+#         logging.exception("Exception in /history/delete")
+#         return jsonify({"error": str(e)}), 500
+# 
+# @app.route("/history/list", methods=["GET"])
+# def list_conversations():
+#     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+#     user_id = authenticated_user['user_principal_id']
+# 
+#     ## get the conversations from cosmos
+#     conversations = cosmos_conversation_client.get_conversations(user_id)
+#     if not isinstance(conversations, list):
+#         return jsonify({"error": f"No conversations for {user_id} were found"}), 404
+# 
+#     ## return the conversation ids
+# 
+#     return jsonify(conversations), 200
+# 
+# @app.route("/history/read", methods=["POST"])
+# def get_conversation():
+#     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+#     user_id = authenticated_user['user_principal_id']
+# 
+#     ## check request for conversation_id
+#     conversation_id = request.json.get("conversation_id", None)
+#     
+#     if not conversation_id:
+#         return jsonify({"error": "conversation_id is required"}), 400
+# 
+#     ## get the conversation object and the related messages from cosmos
+#     conversation = cosmos_conversation_client.get_conversation(user_id, conversation_id)
+#     ## return the conversation id and the messages in the bot frontend format
+#     if not conversation:
+#         return jsonify({"error": f"Conversation {conversation_id} was not found. It either does not exist or the logged in user does not have access to it."}), 404
+#     
+#     # get the messages for the conversation from cosmos
+#     conversation_messages = cosmos_conversation_client.get_messages(user_id, conversation_id)
+# 
+#     ## format the messages in the bot frontend format
+#     messages = [{'id': msg['id'], 'role': msg['role'], 'content': msg['content'], 'createdAt': msg['createdAt']} for msg in conversation_messages]
+# 
+#     return jsonify({"conversation_id": conversation_id, "messages": messages}), 200
+# 
+# @app.route("/history/rename", methods=["POST"])
+# def rename_conversation():
+#     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+#     user_id = authenticated_user['user_principal_id']
+# 
+#     ## check request for conversation_id
+#     conversation_id = request.json.get("conversation_id", None)
+#     
+#     if not conversation_id:
+#         return jsonify({"error": "conversation_id is required"}), 400
+#     
+#     ## get the conversation from cosmos
+#     conversation = cosmos_conversation_client.get_conversation(user_id, conversation_id)
+#     if not conversation:
+#         return jsonify({"error": f"Conversation {conversation_id} was not found. It either does not exist or the logged in user does not have access to it."}), 404
+# 
+#     ## update the title
+#     title = request.json.get("title", None)
+#     if not title:
+#         return jsonify({"error": "title is required"}), 400
+#     conversation['title'] = title
+#     updated_conversation = cosmos_conversation_client.upsert_conversation(conversation)
+# 
+#     return jsonify(updated_conversation), 200
+# 
+# @app.route("/history/delete_all", methods=["DELETE"])
+# def delete_all_conversations():
+#     ## get the user id from the request headers
+#     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+#     user_id = authenticated_user['user_principal_id']
+# 
+#     # get conversations for user
+#     try:
+#         conversations = cosmos_conversation_client.get_conversations(user_id)
+#         if not conversations:
+#             return jsonify({"error": f"No conversations for {user_id} were found"}), 404
+#         
+#         # delete each conversation
+#         for conversation in conversations:
+#             ## delete the conversation messages from cosmos first
+#             deleted_messages = cosmos_conversation_client.delete_messages(conversation['id'], user_id)
+# 
+#             ## Now delete the conversation 
+#             deleted_conversation = cosmos_conversation_client.delete_conversation(user_id, conversation['id'])
+# 
+#         return jsonify({"message": f"Successfully deleted conversation and messages for user {user_id}"}), 200
+#     
+#     except Exception as e:
+#         logging.exception("Exception in /history/delete_all")
+#         return jsonify({"error": str(e)}), 500
+#     
+# 
+# @app.route("/history/clear", methods=["POST"])
+# def clear_messages():
+#     ## get the user id from the request headers
+#     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
+#     user_id = authenticated_user['user_principal_id']
+#     
+#     ## check request for conversation_id
+#     conversation_id = request.json.get("conversation_id", None)
+#     try: 
+#         if not conversation_id:
+#             return jsonify({"error": "conversation_id is required"}), 400
+#         
+#         ## delete the conversation messages from cosmos
+#         deleted_messages = cosmos_conversation_client.delete_messages(conversation_id, user_id)
+# 
+#         return jsonify({"message": "Successfully deleted messages in conversation", "conversation_id": conversation_id}), 200
+#     except Exception as e:
+#         logging.exception("Exception in /history/clear_messages")
+#         return jsonify({"error": str(e)}), 500
+# 
 @app.route("/history/ensure", methods=["GET"])
 def ensure_cosmos():
     if not AZURE_COSMOSDB_ACCOUNT:
@@ -799,31 +830,31 @@ def ensure_cosmos():
 
     return jsonify({"message": "CosmosDB is configured and working"}), 200
 
-
-def generate_title(conversation_messages):
-    ## make sure the messages are sorted by _ts descending
-    title_prompt = 'Summarize the conversation so far into a 4-word or less title. Do not use any quotation marks or punctuation. Respond with a json object in the format {{"title": string}}. Do not include any other commentary or description.'
-
-    messages = [{'role': msg['role'], 'content': msg['content']} for msg in conversation_messages]
-    messages.append({'role': 'user', 'content': title_prompt})
-
-    try:
-        ## Submit prompt to Chat Completions for response
-        base_url = AZURE_OPENAI_ENDPOINT if AZURE_OPENAI_ENDPOINT else f"https://{AZURE_OPENAI_RESOURCE}.openai.azure.com/"
-        openai.api_type = "azure"
-        openai.api_base = base_url
-        openai.api_version = "2023-03-15-preview"
-        openai.api_key = AZURE_OPENAI_KEY
-        completion = openai.ChatCompletion.create(    
-            engine=AZURE_OPENAI_MODEL,
-            messages=messages,
-            temperature=1,
-            max_tokens=64 
-        )
-        title = json.loads(completion['choices'][0]['message']['content'])['title']
-        return title
-    except Exception as e:
-        return messages[-2]['content']
+# 
+# def generate_title(conversation_messages):
+#     ## make sure the messages are sorted by _ts descending
+#     title_prompt = 'Summarize the conversation so far into a 4-word or less title. Do not use any quotation marks or punctuation. Respond with a json object in the format {{"title": string}}. Do not include any other commentary or description.'
+#  
+#     messages = [{'role': msg['role'], 'content': msg['content']} for msg in conversation_messages]
+#     messages.append({'role': 'user', 'content': title_prompt})
+# 
+#     try:
+#         ## Submit prompt to Chat Completions for response
+#         base_url = AZURE_OPENAI_ENDPOINT if AZURE_OPENAI_ENDPOINT else f"https://{AZURE_OPENAI_RESOURCE}.openai.azure.com/"
+#         openai.api_type = "azure"
+#         openai.api_base = base_url
+#         openai.api_version = "2023-03-15-preview"
+#         openai.api_key = AZURE_OPENAI_KEY
+#         completion = openai.ChatCompletion.create(    
+#             engine=AZURE_OPENAI_MODEL,
+#             messages=messages,
+#             temperature=1,
+#             max_tokens=64 
+#         )
+#         title = json.loads(completion['choices'][0]['message']['content'])['title']
+#         return title
+#     except Exception as e:
+#         return messages[-2]['content']
 
 if __name__ == "__main__":
     app.run()
