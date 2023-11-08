@@ -23,11 +23,11 @@ from pylti1p3.registration import Registration
     
 load_dotenv()
 
-app = Flask(__name__, static_folder="static")
-cache = Cache(app, config={'CACHE_TYPE': 'simple'})
+application = Flask(__name__, static_folder="static")
+cache = Cache(application, config={'CACHE_TYPE': 'simple'})
 
 def get_lti_context_config_path():
-    return os.path.join(app.root_path, 'lti', 'course-config', 'course-env.json')
+    return os.path.join(application.root_path, 'lti', 'course-config', 'course-env.json')
 
 def load_lti_course_config(path):
     f = open(path)
@@ -39,9 +39,9 @@ lti_course_config = load_lti_course_config(get_lti_context_config_path())
 
 
 def get_lti_config_path():
-    return os.path.join(app.root_path, 'lti', 'config', 'tool-conf.json')
+    return os.path.join(application.root_path, 'lti', 'config', 'tool-conf.json')
 def get_lti_context_config_path():
-    return os.path.join(app.root_path, 'lti', 'course-config', 'course-env.json')
+    return os.path.join(application.root_path, 'lti', 'course-config', 'course-env.json')
 
 
 def get_launch_data_storage():
@@ -49,7 +49,7 @@ def get_launch_data_storage():
     
 def get_message_launch():
     launch_id = request.cookies.get('launch_id')
-    app.logger.info(pprint.pformat(launch_id))
+    application.logger.info(pprint.pformat(launch_id))
     tool_conf = ToolConfJsonFile(get_lti_config_path())
     flask_request = FlaskRequest()
     launch_data_storage = get_launch_data_storage()
@@ -80,23 +80,23 @@ def set_lti_context_globals(context):
     
     
 # Static Files
-@app.route('/', methods=['GET'])
+@application.route('/', methods=['GET'])
 def index():
 
     message_launch = get_message_launch()
     if not message_launch:
         raise Forbidden('Not authorized.')
     
-    # resp = app.send_static_file("index.html")
+    # resp = application.send_static_file("index.html")
     # resp.set_cookie('launch_id', launch_id)
-    return app.send_static_file("index.html")
+    return application.send_static_file("index.html")
     
-@app.route('/jwks/', methods=['GET'])
+@application.route('/jwks/', methods=['GET'])
 def get_jwks():
     tool_conf = ToolConfJsonFile(get_lti_config_path())
     return jsonify(tool_conf.get_jwks())
 
-@app.route('/login/', methods=['GET', 'POST'])
+@application.route('/login/', methods=['GET', 'POST'])
 def login():
     tool_conf = ToolConfJsonFile(get_lti_config_path())
     launch_data_storage = get_launch_data_storage()
@@ -112,7 +112,7 @@ def login():
         .redirect(target_link_uri)
 
 
-@app.route('/launch/', methods=['POST'])
+@application.route('/launch/', methods=['POST'])
 def launch():
     tool_conf = ToolConfJsonFile(get_lti_config_path())
     flask_request = FlaskRequest()
@@ -120,7 +120,7 @@ def launch():
     message_launch = FlaskMessageLaunch(flask_request, tool_conf, launch_data_storage=launch_data_storage)
     launch_id = message_launch.get_launch_id()
     message_launch_data = message_launch.get_launch_data()
-    app.logger.info(pprint.pformat(message_launch_data))
+    application.logger.info(pprint.pformat(message_launch_data))
 
     # difficulty = message_launch_data.get('https://purl.imsglobal.org/spec/lti/claim/custom', {}) \
     #     .get('difficulty', None)
@@ -136,12 +136,12 @@ def launch():
     #     # 'curr_diff': difficulty
     # }
     # return render_template('game.html', **tpl_kwargs)
-    # return app.send_static_file("index.html")
+    # return application.send_static_file("index.html")
     resp = redirect(url_for('index'))
     resp.set_cookie('launch_id', launch_id)
     return resp
         
-@app.route("/lti/me")
+@application.route("/lti/me")
 def lti_id():
     message_launch = get_message_launch()
     if not message_launch:
@@ -150,17 +150,17 @@ def lti_id():
     message_launch_data = message_launch.get_launch_data()
     name = message_launch_data.get('https://purl.imsglobal.org/spec/lti/claim/custom', {}).get('name', None)
     course = message_launch_data.get('https://purl.imsglobal.org/spec/lti/claim/context', {}).get('title', None)
-    app.logger.info(pprint.pformat(message_launch_data))
-    app.logger.info(name)
-    app.logger.info(course)
+    application.logger.info(pprint.pformat(message_launch_data))
+    application.logger.info(name)
+    application.logger.info(course)
     return jsonify([{'name':name, 'course':course}]), 200
 
     
-@app.route("/favicon.ico")
+@application.route("/favicon.ico")
 def favicon():
-    return app.send_static_file('favicon.ico')
+    return application.send_static_file('favicon.ico')
 
-@app.route("/assets/<path:path>")
+@application.route("/assets/<path:path>")
 def assets(path):
     return send_from_directory("static/assets", path)
 
@@ -168,7 +168,7 @@ def assets(path):
 # ACS Integration Settings
 # AZURE_SEARCH_SERVICE = os.environ.get("AZURE_SEARCH_SERVICE")
 # AZURE_SEARCH_INDEX = os.environ.get("AZURE_SEARCH_INDEX")
-# AZURE_SEARCH_KEY = os.environ.get("AZURE_SEARCH_KEY")
+AZURE_SEARCH_KEY = os.environ.get("AZURE_SEARCH_KEY")
 AZURE_SEARCH_USE_SEMANTIC_SEARCH = os.environ.get("AZURE_SEARCH_USE_SEMANTIC_SEARCH", "false")
 AZURE_SEARCH_SEMANTIC_SEARCH_CONFIG = os.environ.get("AZURE_SEARCH_SEMANTIC_SEARCH_CONFIG", "default")
 AZURE_SEARCH_TOP_K = os.environ.get("AZURE_SEARCH_TOP_K", 5)
@@ -572,7 +572,7 @@ def conversation_without_data(request_body):
         return Response(stream_without_data(response, history_metadata), mimetype='text/event-stream')
 
 
-@app.route("/conversation", methods=["GET", "POST"])
+@application.route("/conversation", methods=["GET", "POST"])
 def conversation():
     message_launch = get_message_launch()
     if not message_launch:
@@ -596,7 +596,7 @@ def conversation_internal(request_body):
         return jsonify({"error": str(e)}), 500
 
 # ## Conversation History API ## 
-# @app.route("/history/generate", methods=["POST"])
+# @application.route("/history/generate", methods=["POST"])
 # def add_conversation():
 #     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
 #     user_id = authenticated_user['user_principal_id']
@@ -641,7 +641,7 @@ def conversation_internal(request_body):
 #         return jsonify({"error": str(e)}), 500
 # 
 # 
-# @app.route("/history/update", methods=["POST"])
+# @application.route("/history/update", methods=["POST"])
 # def update_conversation():
 #     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
 #     user_id = authenticated_user['user_principal_id']
@@ -686,7 +686,7 @@ def conversation_internal(request_body):
 #         logging.exception("Exception in /history/update")
 #         return jsonify({"error": str(e)}), 500
 # 
-# @app.route("/history/delete", methods=["DELETE"])
+# @application.route("/history/delete", methods=["DELETE"])
 # def delete_conversation():
 #     ## get the user id from the request headers
 #     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
@@ -709,7 +709,7 @@ def conversation_internal(request_body):
 #         logging.exception("Exception in /history/delete")
 #         return jsonify({"error": str(e)}), 500
 # 
-# @app.route("/history/list", methods=["GET"])
+# @application.route("/history/list", methods=["GET"])
 # def list_conversations():
 #     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
 #     user_id = authenticated_user['user_principal_id']
@@ -723,7 +723,7 @@ def conversation_internal(request_body):
 # 
 #     return jsonify(conversations), 200
 # 
-# @app.route("/history/read", methods=["POST"])
+# @application.route("/history/read", methods=["POST"])
 # def get_conversation():
 #     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
 #     user_id = authenticated_user['user_principal_id']
@@ -748,7 +748,7 @@ def conversation_internal(request_body):
 # 
 #     return jsonify({"conversation_id": conversation_id, "messages": messages}), 200
 # 
-# @app.route("/history/rename", methods=["POST"])
+# @application.route("/history/rename", methods=["POST"])
 # def rename_conversation():
 #     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
 #     user_id = authenticated_user['user_principal_id']
@@ -773,7 +773,7 @@ def conversation_internal(request_body):
 # 
 #     return jsonify(updated_conversation), 200
 # 
-# @app.route("/history/delete_all", methods=["DELETE"])
+# @application.route("/history/delete_all", methods=["DELETE"])
 # def delete_all_conversations():
 #     ## get the user id from the request headers
 #     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
@@ -800,7 +800,7 @@ def conversation_internal(request_body):
 #         return jsonify({"error": str(e)}), 500
 #     
 # 
-# @app.route("/history/clear", methods=["POST"])
+# @application.route("/history/clear", methods=["POST"])
 # def clear_messages():
 #     ## get the user id from the request headers
 #     authenticated_user = get_authenticated_user_details(request_headers=request.headers)
@@ -820,7 +820,7 @@ def conversation_internal(request_body):
 #         logging.exception("Exception in /history/clear_messages")
 #         return jsonify({"error": str(e)}), 500
 # 
-@app.route("/history/ensure", methods=["GET"])
+@application.route("/history/ensure", methods=["GET"])
 def ensure_cosmos():
     if not AZURE_COSMOSDB_ACCOUNT:
         return jsonify({"error": "CosmosDB is not configured"}), 404
@@ -857,4 +857,5 @@ def ensure_cosmos():
 #         return messages[-2]['content']
 
 if __name__ == "__main__":
-    app.run()
+    application.debug = True
+    application.run()
