@@ -49,7 +49,7 @@ def get_launch_data_storage():
     
 def get_message_launch():
     launch_id = request.cookies.get('launch_id')
-    application.logger.info(pprint.pformat(launch_id))
+    # application.logger.info(pprint.pformat(launch_id))
     tool_conf = ToolConfJsonFile(get_lti_config_path())
     flask_request = FlaskRequest()
     launch_data_storage = get_launch_data_storage()
@@ -120,7 +120,7 @@ def launch():
     message_launch = FlaskMessageLaunch(flask_request, tool_conf, launch_data_storage=launch_data_storage)
     launch_id = message_launch.get_launch_id()
     message_launch_data = message_launch.get_launch_data()
-    application.logger.info(pprint.pformat(message_launch_data))
+    # application.logger.info(pprint.pformat(message_launch_data))
 
     # difficulty = message_launch_data.get('https://purl.imsglobal.org/spec/lti/claim/custom', {}) \
     #     .get('difficulty', None)
@@ -138,7 +138,7 @@ def launch():
     # return render_template('game.html', **tpl_kwargs)
     # return application.send_static_file("index.html")
     resp = redirect(url_for('index'))
-    resp.set_cookie('launch_id', launch_id)
+    resp.set_cookie('launch_id', launch_id, secure=True, samesite='None')
     return resp
         
 @application.route("/lti/me")
@@ -150,9 +150,9 @@ def lti_id():
     message_launch_data = message_launch.get_launch_data()
     name = message_launch_data.get('https://purl.imsglobal.org/spec/lti/claim/custom', {}).get('name', None)
     course = message_launch_data.get('https://purl.imsglobal.org/spec/lti/claim/context', {}).get('title', None)
-    application.logger.info(pprint.pformat(message_launch_data))
-    application.logger.info(name)
-    application.logger.info(course)
+    # application.logger.info(pprint.pformat(message_launch_data))
+    # application.logger.info(name)
+    # application.logger.info(course)
     return jsonify([{'name':name, 'course':course}]), 200
 
     
