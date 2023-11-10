@@ -59,25 +59,38 @@ def get_message_launch():
 
 def get_lti_context(launch_data):
     return launch_data.get('https://purl.imsglobal.org/spec/lti/claim/context', {}).get('id', None)
+    
+def get_lti_name(launch_data):
+    return launch_data.get('https://purl.imsglobal.org/spec/lti/claim/custom', {}).get('name', None)
+    
+def get_lti_course(launch_data):   
+    return launch_data.get('https://purl.imsglobal.org/spec/lti/claim/context', {}).get('title', None)
 
-def set_lti_context_globals(context):
+def set_lti_context_globals(launch_data):
     global AZURE_SEARCH_SERVICE
     global AZURE_SEARCH_INDEX
     global AZURE_SEARCH_KEY
+    global AZURE_OPENAI_KEY
     global AZURE_OPENAI_RESOURCE
     global AZURE_OPENAI_MODEL
-    global AZURE_OPENAI_SYSTEM_MESSAGE 
+    global AZURE_OPENAI_SYSTEM_MESSAGE
+    global AZURE_OPENAI_MODEL_NAME
     
-    context_data = lti_course_config.get(context, lti_course_config['default'])
-
+    lti_context =  get_lti_context(launch_data)
+    name = get_lti_name(launch_data)
+    course = get_lti_course(launch_data)
+    
+    context_data = lti_course_config.get(lti_context, lti_course_config['default'])
     
     AZURE_SEARCH_SERVICE = context_data.get('AZURE_SEARCH_SERVICE', None)
     AZURE_SEARCH_INDEX = context_data.get('AZURE_SEARCH_INDEX', None)
     AZURE_SEARCH_KEY = context_data.get('AZURE_SEARCH_KEY', None)
+    AZURE_OPENAI_KEY = os.environ.get(context_data.get('RESOURCE_KEY_ENV_ID', ""), None)
     AZURE_OPENAI_RESOURCE = context_data.get('AZURE_OPENAI_RESOURCE', None)
     AZURE_OPENAI_MODEL = context_data.get('AZURE_OPENAI_MODEL', None)
-    AZURE_OPENAI_SYSTEM_MESSAGE = context_data.get('AZURE_OPENAI_SYSTEM_MESSAGE', None)
-    
+    AZURE_OPENAI_SYSTEM_MESSAGE = context_data.get('AZURE_OPENAI_SYSTEM_MESSAGE', None).replace("{person}", name).replace("{course}", course)
+    # application.logger.info(AZURE_OPENAI_SYSTEM_MESSAGE)
+    AZURE_OPENAI_MODEL_NAME = context_data.get('AZURE_OPENAI_MODEL_NAME', "gpt-35-turbo-16k")
     
 # Static Files
 @application.route('/', methods=['GET'])
@@ -138,7 +151,11 @@ def launch():
     # return render_template('game.html', **tpl_kwargs)
     # return application.send_static_file("index.html")
     resp = redirect(url_for('index'))
-    resp.set_cookie('launch_id', launch_id, secure=True, samesite='None')
+    if request.host.startswith("127.0.0.1"):
+        resp.set_cookie('launch_id', launch_id)    
+    else:
+        resp.set_cookie('launch_id', launch_id, secure=True, samesite='None')
+        
     return resp
         
 @application.route("/lti/me")
@@ -147,9 +164,9 @@ def lti_id():
     if not message_launch:
         raise Forbidden('Not authorized.')
         
-    message_launch_data = message_launch.get_launch_data()
-    name = message_launch_data.get('https://purl.imsglobal.org/spec/lti/claim/custom', {}).get('name', None)
-    course = message_launch_data.get('https://purl.imsglobal.org/spec/lti/claim/context', {}).get('title', None)
+    launch_data = message_launch.get_launch_data()
+    name = get_lti_name(launch_data)
+    course = get_lti_course(launch_data)
     # application.logger.info(pprint.pformat(message_launch_data))
     # application.logger.info(name)
     # application.logger.info(course)
@@ -186,7 +203,7 @@ AZURE_SEARCH_STRICTNESS = os.environ.get("AZURE_SEARCH_STRICTNESS", 3)
 # AZURE_OPENAI_RESOURCE = os.environ.get("AZURE_OPENAI_RESOURCE")
 # AZURE_OPENAI_MODEL = os.environ.get("AZURE_OPENAI_MODEL")
 AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT")
-AZURE_OPENAI_KEY = os.environ.get("AZURE_OPENAI_KEY")
+# AZURE_OPENAI_KEY = os.environ.get("AZURE_OPENAI_KEY")
 AZURE_OPENAI_TEMPERATURE = os.environ.get("AZURE_OPENAI_TEMPERATURE", 0)
 AZURE_OPENAI_TOP_P = os.environ.get("AZURE_OPENAI_TOP_P", 1.0)
 AZURE_OPENAI_MAX_TOKENS = os.environ.get("AZURE_OPENAI_MAX_TOKENS", 1000)
@@ -194,7 +211,7 @@ AZURE_OPENAI_STOP_SEQUENCE = os.environ.get("AZURE_OPENAI_STOP_SEQUENCE")
 AZURE_OPENAI_SYSTEM_MESSAGE = os.environ.get("AZURE_OPENAI_SYSTEM_MESSAGE", "You are an AI assistant that helps people find information.")
 AZURE_OPENAI_PREVIEW_API_VERSION = os.environ.get("AZURE_OPENAI_PREVIEW_API_VERSION", "2023-08-01-preview")
 AZURE_OPENAI_STREAM = os.environ.get("AZURE_OPENAI_STREAM", "true")
-AZURE_OPENAI_MODEL_NAME = os.environ.get("AZURE_OPENAI_MODEL_NAME", "gpt-35-turbo-16k") # Name of the model, e.g. 'gpt-35-turbo-16k' or 'gpt-4'
+# AZURE_OPENAI_MODEL_NAME = os.environ.get("AZURE_OPENAI_MODEL_NAME", "gpt-35-turbo-16k") # Name of the model, e.g. 'gpt-35-turbo-16k' or 'gpt-4'
 AZURE_OPENAI_EMBEDDING_ENDPOINT = os.environ.get("AZURE_OPENAI_EMBEDDING_ENDPOINT")
 AZURE_OPENAI_EMBEDDING_KEY = os.environ.get("AZURE_OPENAI_EMBEDDING_KEY")
 AZURE_OPENAI_EMBEDDING_NAME = os.environ.get("AZURE_OPENAI_EMBEDDING_NAME", "")
@@ -578,9 +595,9 @@ def conversation():
     if not message_launch:
         raise Forbidden('Not authorized.')
         
-    message_launch_data = message_launch.get_launch_data()
-    lti_context =  get_lti_context(message_launch_data)
-    set_lti_context_globals(lti_context)
+    launch_data = message_launch.get_launch_data()
+    
+    set_lti_context_globals(launch_data)
     request_body = request.json
     return conversation_internal(request_body)
 
@@ -857,5 +874,5 @@ def ensure_cosmos():
 #         return messages[-2]['content']
 
 if __name__ == "__main__":
-    application.debug = True
+    # application.debug = True
     application.run()

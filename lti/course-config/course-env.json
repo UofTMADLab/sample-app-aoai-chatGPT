@@ -1,12 +1,18 @@
 {
 	"default": {
-		"AZURE_OPENAI_RESOURCE":"uoftoai",
-		"AZURE_OPENAI_MODEL": "gpt35turbo",
-		"AZURE_OPENAI_SYSTEM_MESSAGE": "You are an AI assistant at the University of Toronto that helps undergraduate students. Students may ask you to produce information in sentences, creating lists, or by creating sample quiz questions. Answers provided should be in friendly, simple language and not exceed 400 words."
+		"RESOURCE_KEY_ENV_ID":"UOFT_OAI_CA",
+		"AZURE_OPENAI_RESOURCE":"uoftopenai-ca",
+		"AZURE_OPENAI_MODEL": "mws-local-dev",
+		"AZURE_OPENAI_MODEL_NAME": "gpt-35-turbo",
+		"AZURE_OPENAI_MODEL_NAME": "gpt-4",
+		"AZURE_OPENAI_SYSTEM_MESSAGE": "You are an AI assistant at the University of Toronto that helps undergraduate students. Students may ask you to produce information in sentences, creating lists, or by creating sample quiz questions. Answers provided should be in friendly, simple language and not exceed 400 words. The name of the person you are helping is {person}. They are in a course named {course}."
 	},
-	"f97330a96452fc363a34e0ef6d8d0d3e9e1007d2": {
+	"x": {
+		
+		"RESOURCE_KEY_ENV_ID":"UOFT_OAI_EUR",
 		"AZURE_OPENAI_RESOURCE":"uoftoai",
 		"AZURE_OPENAI_MODEL": "gpt35turbo",
+		"AZURE_OPENAI_MODEL_NAME": "gpt-35-turbo",
 		"AZURE_SEARCH_SERVICE": "p574-cognitive-search-01",
 		"AZURE_SEARCH_INDEX": "amar-nk1",
 		"AZURE_OPENAI_SYSTEM_MESSAGE": "You are an AI assistant at the University of Toronto that helps undergraduate students with human physiology lecture material. Students may ask you to produce information in sentences, creating lists, or by creating sample quiz questions. Answers provided should be in friendly, simple language and not exceed 400 words."
