@@ -1,7 +1,7 @@
 ## Redirect URIs
 	- https://aichat.dev.utoronto.io/launch/
 	- https://aichat.dev.utoronto.io/launch
-	
+	(or running locally that's http://127.0.0.1:5000/launch, http://127.0.0.1:5000/launch/)
 ## Title
 	- Azure Open AI Chat Frontend
 	
