@@ -90,7 +90,7 @@ if __name__ == '__main__':
   NETWORK = 'oaichat'
   PORT = 8000
   TABLES = {
-    'aichat_conversations': {
+    'aichat_conversations_dev': {
       'key':   [{'AttributeName':'qcontext_user_id', 'KeyType':'HASH'}, {'AttributeName':'conversation_id', 'KeyType': 'RANGE'}],
       'attrs': [
                   {'AttributeName':'qcontext_user_id', 'AttributeType':'S'},
@@ -120,7 +120,7 @@ if __name__ == '__main__':
           }
       ]
     },
-    'aichat_messages': {
+    'aichat_messages_dev': {
       'key':   [{'AttributeName':'qcontext_user_id_conversation_id', 'KeyType':'HASH'}, {'AttributeName':'message_id', 'KeyType': 'RANGE'}],
       'attrs': [
                   {'AttributeName':'qcontext_user_id_conversation_id', 'AttributeType':'S'},
