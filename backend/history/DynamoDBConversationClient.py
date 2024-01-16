@@ -1,5 +1,6 @@
 import os
 import uuid
+import logging
 from datetime import datetime
 from flask import Flask, request
 import boto3
@@ -49,20 +50,20 @@ class DynamoDBConversationClient():
             'title': title
         }
         
-        resp = self.conversations_table.put_item(
-            Item=conversation,
-            ReturnValues="ALL_NEW",
-        )
-        if resp['Attributes']:
-            return resp['Attributes']
-        else:
+        try:
+            resp = self.conversations_table.put_item(
+                Item=conversation,
+                ReturnValues="NONE",
+            )
+            return conversation
+        except:
             return False
             
     def upsert_conversation(self, conversation):
-        resp = self.conversations_table.put_item(Item=conversation, ReturnValues="ALL_NEW")
-        if resp['Attributes']:
-            return resp['Attributes']
-        else:
+        try:
+            resp = self.conversations_table.put_item(Item=conversation, ReturnValues="NONE")
+            return conversation
+        except:
             return False
     
     def delete_conversation(self, canvas_context, user_id, conversation_id):
@@ -101,30 +102,30 @@ class DynamoDBConversationClient():
             'ASC': True,
             'DESC': False
         }
-            
-        resp = self.conversations_table.query(
-            IndexName='ByUserAndDate',
-            ScanIndexForward=scan_directions[sort_order],
-            KeyConditionExpression="qcontext_user_id=:qcontext_user_id",
-            ExpressionAttributeValues={":qcontext_user_id":f'{canvas_context}#{user_id}'}
-        )
-        
-        ## if no conversations are found, return None
-        if len(resp['Items']) == 0:
-            return None
-        else:
+        try:   
+            resp = self.conversations_table.query(
+                IndexName='ByUserAndDate',
+                ScanIndexForward=scan_directions[sort_order],
+                KeyConditionExpression="qcontext_user_id=:qcontext_user_id",
+                ExpressionAttributeValues={":qcontext_user_id":f'{canvas_context}#{user_id}'}
+            )
             return resp['Items']
+        except:
+            return None
     
     def get_conversation(self, canvas_context, user_id, conversation_id):
         key = {
             'qcontext_user_id': f'{canvas_context}#{user_id}',
             'conversation_id': conversation_id,  
         }
-        
-        resp = self.conversations_table.get_item(
-            Key=key
-        )
-        return resp['Item']
+        try:
+            
+            resp = self.conversations_table.get_item(
+                Key=key
+            )
+            return resp['Item']
+        except:
+            return None
 
     
     def create_message(self, conversation_id, canvas_context, user_id, input_message: dict):
@@ -141,13 +142,13 @@ class DynamoDBConversationClient():
             'content': input_message['content']
         }
         ## TODO: add some error handling based on the output of the upsert_item call
-        resp = self.messages_table.update_item(
-            Item=message,
-            ReturnValues="ALL_NEW"            
-        )
-        if resp['Attributes']:
-            return resp['Attributes']
-        else:
+        try:
+            resp = self.messages_table.put_item(
+                Item=message,
+                ReturnValues="NONE"            
+            )
+            return message
+        except:
             return False
     
     
@@ -157,12 +158,16 @@ class DynamoDBConversationClient():
             'ASC': True,
             'DESC': False
         }
-        resp = self.messages_table.query(
-            IndexName='ByUserConversationAndDate',
-            ScanIndexForward=scan_directions['ASC'],
-            KeyConditionExpression="qcontext_user_id_conversation_id=:qcontext_user_id_conversation_id",
-            ExpressionAttributeValues={':qcontext_user_id_conversation_id': f'{canvas_context}#{user_id}#{conversation_id}'}
-        )
-                
-        return resp['Items']
+        try:
+            
+            resp = self.messages_table.query(
+                IndexName='ByUserConversationAndDate',
+                ScanIndexForward=scan_directions['ASC'],
+                KeyConditionExpression="qcontext_user_id_conversation_id=:qcontext_user_id_conversation_id",
+                ExpressionAttributeValues={':qcontext_user_id_conversation_id': f'{canvas_context}#{user_id}#{conversation_id}'}
+            )
+                    
+            return resp['Items']
+        except:
+            return None
 

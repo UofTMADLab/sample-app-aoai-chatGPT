@@ -605,6 +605,7 @@ def add_conversation():
     launch_data = message_launch.get_launch_data()
     user_id = get_lti_user_id(launch_data)
     canvas_context = get_lti_context(launch_data)
+    ai_context = get_lti_openai_context(launch_data)
     
     ## check request for conversation_id
     conversation_id = request.json.get("conversation_id", None)
@@ -617,7 +618,7 @@ def add_conversation():
         # check for the conversation_id, if the conversation is not set, we will create a new one
         history_metadata = {}
         if not conversation_id:
-            title = generate_title(request.json["messages"])
+            title = generate_title(request.json["messages"], ai_context)
             conversation_dict = conversation_client.create_conversation(canvas_context=canvas_context, user_id=user_id, title=title)
             conversation_id = conversation_dict['conversation_id']
             history_metadata['title'] = title
@@ -627,7 +628,7 @@ def add_conversation():
         ## then write it to the conversation history in cosmos
         messages = request.json["messages"]
         if len(messages) > 0 and messages[-1]['role'] == "user":
-            cosmos_conversation_client.create_message(
+            conversation_client.create_message(
                 conversation_id=conversation_id,
                 canvas_context=canvas_context,
                 user_id=user_id,
@@ -640,7 +641,7 @@ def add_conversation():
         request_body = request.json
         history_metadata['conversation_id'] = conversation_id
         request_body['history_metadata'] = history_metadata
-        return conversation_internal(request_body)
+        return conversation_internal(request_body, ai_context)
        
     except Exception as e:
         logging.exception("Exception in /history/generate")
@@ -717,6 +718,7 @@ def delete_conversation():
     conversation_id = request.json.get("conversation_id", None)
     try: 
         if not conversation_id:
+            logging.exception(f"request: {request}")
             return jsonify({"error": "conversation_id is required"}), 400
         
         ## delete the conversation messages from cosmos first
@@ -741,7 +743,7 @@ def list_conversations():
     canvas_context = get_lti_context(launch_data)
 
     ## get the conversations from cosmos
-    conversations = conversation_client.get_conversations(canvas_context, user_id)
+    conversations = conversation_client.get_conversations(canvas_context, user_id)    
     if not isinstance(conversations, list):
         return jsonify({"error": f"No conversations for {user_id} were found"}), 404
 
@@ -775,7 +777,7 @@ def get_conversation():
     conversation_messages = conversation_client.get_messages(canvas_context, user_id, conversation_id)
 
     ## format the messages in the bot frontend format
-    messages = [{'id': msg['message_id'], 'role': msg['role'], 'content': msg['content'], 'createdAt': msg['createdAt']} for msg in conversation_messages]
+    messages = [{'id': msg['message_id'], 'role': msg['role'], 'content': msg['content'], 'createdAt': msg['created_at']} for msg in conversation_messages]
 
     return jsonify({"conversation_id": conversation_id, "messages": messages}), 200
 
