@@ -20,8 +20,8 @@ class DynamoDBConversationClient():
 
     def __init__(self):
         self.dynamodb_client = self.get_dynamodb_instance()
-        self.conversations_table = self.dynamodb_client.Table('aichat_conversations')
-        self.messages_table = self.dynamodb_client.Table('aichat_messages')
+        self.conversations_table = self.dynamodb_client.Table(f'aichat_conversations_{os.environ.get('AWS_DDB_ENV','dev')}')
+        self.messages_table = self.dynamodb_client.Table(f'aichat_messages_{os.environ.get('AWS_DDB_ENV','dev')}')
         
     def ensure(self):
         try:
@@ -37,7 +37,42 @@ class DynamoDBConversationClient():
             return True
         except:
             return False
-            
+       
+    def _convert_conversation_to_frontend_format(self, conversation):
+        return {
+            'id': conversation['conversation_id'],  
+            'type': 'conversation',
+            'createdAt': conversation['created_at'],  
+            'updatedAt': conversation['updated_at'],  
+            'userId': conversation['user_id'],
+            'title': conversation['title']
+        }
+    def _convert_conversation_to_backend_format(self, canvas_context, conversation):
+        return {
+            'qcontext_user_id': f'{canvas_context}#{conversation["userId"]}',
+            'conversation_id': conversation['id'],  
+            'is_deleted': 'FALSE',
+            'created_at': conversation['createdAt'],  
+            'updated_at': conversation['updatedAt'],  
+            'qcontext': canvas_context,
+            'user_id': conversation['userId'],
+            'title': conversation['title']
+        }
+        
+    def _convert_message_to_frontend_format(self, message):
+        return {
+            'id': message['message_id'],
+            'type': 'message',
+            'userId' : message['user_id'],
+            'createdAt': message['created_at'],
+            'updatedAt': message['updated_at'],
+            'conversationId' : message['conversation_id'],
+            'role': message['role'],
+            'content': message['content']
+        }
+    def _get_message_id_from_frontend_message(self, message):
+        return message['id']
+        
     def create_conversation(self, canvas_context, user_id, title = ''):
         conversation = {
             'qcontext_user_id': f'{canvas_context}#{user_id}',
@@ -55,13 +90,14 @@ class DynamoDBConversationClient():
                 Item=conversation,
                 ReturnValues="NONE",
             )
-            return conversation
+            return self._convert_conversation_to_frontend_format(conversation)
         except:
             return False
             
-    def upsert_conversation(self, conversation):
+    def upsert_conversation(self, canvas_context, conversation):
+        b_conversation = self._convert_conversation_to_backend_format(canvas_context, conversation)
         try:
-            resp = self.conversations_table.put_item(Item=conversation, ReturnValues="NONE")
+            resp = self.conversations_table.put_item(Item=b_conversation, ReturnValues="NONE")
             return conversation
         except:
             return False
@@ -80,13 +116,13 @@ class DynamoDBConversationClient():
         
     def delete_messages(self, conversation_id, canvas_context, user_id):
         ## get a list of all the messages in the conversation
-        messages = self.get_messages(canvas_context, user_id, conversation_id)
+        frontend_style_messages = self.get_messages(canvas_context, user_id, conversation_id)
         response_list = []
-        if messages:
-            for message in messages:
+        if frontend_style_messages:
+            for message in frontend_style_messages:
                 key = {
-                    'qcontext_user_id_conversation_id': message['qcontext_user_id_conversation_id'],
-                    'message_id': message['message_id'],                     
+                    'qcontext_user_id_conversation_id': f'{canvas_context}#{user_id}#{conversation_id}',
+                    'message_id': self._get_message_id_from_frontend_message(message),                     
                 }
                 resp = self.messages_table.delete_item(
                     Key=key,
@@ -109,7 +145,7 @@ class DynamoDBConversationClient():
                 KeyConditionExpression="qcontext_user_id=:qcontext_user_id",
                 ExpressionAttributeValues={":qcontext_user_id":f'{canvas_context}#{user_id}'}
             )
-            return resp['Items']
+            return [self._convert_conversation_to_frontend_format(c) for c in resp['Items']]
         except:
             return None
     
@@ -123,7 +159,7 @@ class DynamoDBConversationClient():
             resp = self.conversations_table.get_item(
                 Key=key
             )
-            return resp['Item']
+            return self._convert_conversation_to_frontend_format(resp['Item'])
         except:
             return None
 
@@ -147,7 +183,7 @@ class DynamoDBConversationClient():
                 Item=message,
                 ReturnValues="NONE"            
             )
-            return message
+            return self._convert_message_to_frontend_format(message)
         except:
             return False
     
@@ -167,7 +203,7 @@ class DynamoDBConversationClient():
                 ExpressionAttributeValues={':qcontext_user_id_conversation_id': f'{canvas_context}#{user_id}#{conversation_id}'}
             )
                     
-            return resp['Items']
+            return [self._convert_message_to_frontend_format(m) for m in resp['Items']]
         except:
             return None
 

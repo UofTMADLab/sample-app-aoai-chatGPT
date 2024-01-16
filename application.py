@@ -620,9 +620,9 @@ def add_conversation():
         if not conversation_id:
             title = generate_title(request.json["messages"], ai_context)
             conversation_dict = conversation_client.create_conversation(canvas_context=canvas_context, user_id=user_id, title=title)
-            conversation_id = conversation_dict['conversation_id']
+            conversation_id = conversation_dict['id']
             history_metadata['title'] = title
-            history_metadata['date'] = conversation_dict['created_at']
+            history_metadata['date'] = conversation_dict['createdAt']
             
         ## Format the incoming message object in the "chat/completions" messages format
         ## then write it to the conversation history in cosmos
@@ -777,7 +777,7 @@ def get_conversation():
     conversation_messages = conversation_client.get_messages(canvas_context, user_id, conversation_id)
 
     ## format the messages in the bot frontend format
-    messages = [{'id': msg['message_id'], 'role': msg['role'], 'content': msg['content'], 'createdAt': msg['created_at']} for msg in conversation_messages]
+    messages = [{'id': msg['id'], 'role': msg['role'], 'content': msg['content'], 'createdAt': msg['createdAt']} for msg in conversation_messages]
 
     return jsonify({"conversation_id": conversation_id, "messages": messages}), 200
 
@@ -807,7 +807,7 @@ def rename_conversation():
     if not title:
         return jsonify({"error": "title is required"}), 400
     conversation['title'] = title
-    updated_conversation = conversation_client.upsert_conversation(conversation)
+    updated_conversation = conversation_client.upsert_conversation(canvas_context, conversation)
 
     return jsonify(updated_conversation), 200
 
@@ -825,16 +825,16 @@ def delete_all_conversations():
     # get conversations for user
     try:
         conversations = conversation_client.get_conversations(canvas_context, user_id)
-        if not conversations:
+        if not isinstance(conversations, list):
             return jsonify({"error": f"No conversations for {user_id} were found"}), 404
         
         # delete each conversation
         for conversation in conversations:
             ## delete the conversation messages from cosmos first
-            deleted_messages = conversation_client.delete_messages(conversation['conversation_id'], canvas_context, user_id)
+            deleted_messages = conversation_client.delete_messages(conversation['id'], canvas_context, user_id)
 
             ## Now delete the conversation 
-            deleted_conversation = conversation_client.delete_conversation(canvas_context, user_id, conversation['conversation_id'])
+            deleted_conversation = conversation_client.delete_conversation(canvas_context, user_id, conversation['id'])
 
         return jsonify({"message": f"Successfully deleted conversation and messages for user {user_id}"}), 200
     
