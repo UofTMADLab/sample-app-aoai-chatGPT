@@ -20,8 +20,8 @@ class DynamoDBConversationClient():
 
     def __init__(self):
         self.dynamodb_client = self.get_dynamodb_instance()
-        self.conversations_table = self.dynamodb_client.Table(f'aichat_conversations_{os.environ.get('AWS_DDB_ENV','dev')}')
-        self.messages_table = self.dynamodb_client.Table(f'aichat_messages_{os.environ.get('AWS_DDB_ENV','dev')}')
+        self.conversations_table = self.dynamodb_client.Table(f'aichat_conversations_{os.environ.get("AWS_DDB_ENV","dev")}')
+        self.messages_table = self.dynamodb_client.Table(f'aichat_messages_{os.environ.get("AWS_DDB_EN","dev")}')
         
     def ensure(self):
         try:
