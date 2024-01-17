@@ -176,13 +176,13 @@ def lti_config_info():
         # include system message and other config parameters for instructors
         result = dynamic_config
         # set default welcome messages if they are not configured
-        result['welcome_message'] = dynamic_config.get('welcome_message', "Welcome")
+        result['welcome_message'] = dynamic_config.get('welcome_message', "The University of Toronto Chatbot is Ready to Answer Your Questions. Your chat history will be saved.")
         result['welcome_image]'] = dynamic_config.get('welcome_image', "image.png"),
         result['qcontext'] = canvas_context
     else:   
         # basic config for non-instructors     
         result = {
-            'welcome_message':dynamic_config.get('welcome_message', "Welcome"),
+            'welcome_message':dynamic_config.get('welcome_message', "The University of Toronto Chatbot is Ready to Answer Your Questions. Your chat history will be saved."),
             'welcome_image':dynamic_config.get('welcome_image', "image.png"),    
             'qcontext':canvas_context    
         }
