@@ -1,9 +1,10 @@
 import React, { createContext, useReducer, ReactNode, useEffect } from 'react';
 import { appStateReducer } from './AppReducer';
 import { ChatHistoryLoadingState, CosmosDBHealth, historyList, historyEnsure, CosmosDBStatus } from '../api';
-import { Conversation, LtiUserInfo } from '../api';
+import { Conversation, LtiUserInfo, LtiConfig } from '../api';
   
 export interface AppState {
+    ltiConfig: LtiConfig | null;
     ltiUserInfo: LtiUserInfo | null;
     isChatHistoryOpen: boolean;
     chatHistoryLoadingState: ChatHistoryLoadingState;
@@ -14,6 +15,7 @@ export interface AppState {
 }
 
 export type Action =
+    | { type: 'LTI_CONFIG', payload: LtiConfig}
     | { type: 'LTI_USER_INFO', payload: LtiUserInfo}
     | { type: 'TOGGLE_CHAT_HISTORY' }
     | { type: 'SET_COSMOSDB_STATUS', payload: CosmosDBHealth }
@@ -28,6 +30,7 @@ export type Action =
     | { type: 'FETCH_CHAT_HISTORY', payload: Conversation[] | null }  // API Call
 
 const initialState: AppState = {
+    ltiConfig: null,
     ltiUserInfo: null,
     isChatHistoryOpen: false,
     chatHistoryLoadingState: ChatHistoryLoadingState.Loading,

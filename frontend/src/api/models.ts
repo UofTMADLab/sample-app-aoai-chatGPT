@@ -3,6 +3,18 @@ export type LtiUserInfo = {
     course: string;
 }
 
+export type LtiConfig = {
+    welcome_message: string;
+    welcome_image: string;
+    qcontext: string;
+    system_message?: string;
+    model?: string;
+    model_name?: string;
+    search_service?: string;
+    search_index?: string;
+    history_mode?: string;
+    student_access?: string;
+}
 export type AskResponse = {
     answer: string;
     citations: Citation[];

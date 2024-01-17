@@ -18,6 +18,7 @@ import {
     Citation,
     ToolMessageContent,
     ChatResponse,
+    getLtiConfig,
     getLtiUserInfo,
     getUserInfo,
     Conversation,
@@ -102,6 +103,12 @@ const Chat = () => {
         console.log(ltiUserInfoList)
         appStateContext?.dispatch({ type: 'LTI_USER_INFO', payload: ltiUserInfoList[0] });
     }
+    
+    const getLtiConfigAction = async() => {
+        const c = await getLtiConfig()
+        appStateContext?.dispatch({type: 'LTI_CONFIG', payload: c});
+    }
+    
 
     const makeApiRequestWithoutCosmosDB = async (question: string, conversationId?: string) => {
         setIsLoading(true);
@@ -508,6 +515,10 @@ const Chat = () => {
     useEffect(() => {
         getLtiUserInfoList();
     }, []);
+    
+    useEffect(() => {
+        getLtiConfigAction();
+    }, []);
 
     useLayoutEffect(() => {
         chatMessageStreamEnd.current?.scrollIntoView({ behavior: "smooth" })
@@ -569,7 +580,7 @@ const Chat = () => {
                                 />
                                 <h1 className={styles.chatEmptyStateTitle}>{appStateContext?.state.ltiUserInfo?.name}</h1>
                                 <h1 className={styles.chatEmptyStateSubtitle}>{appStateContext?.state.ltiUserInfo?.course}</h1>
-                                <h2 className={styles.chatEmptyStateSubtitle}>The University of Toronto Chatbot is Ready to Answer Your Questions</h2>
+                                <h2 className={styles.chatEmptyStateSubtitle}>{appStateContext?.state.ltiConfig?.welcome_message}</h2>
                             </Stack>
                         ) : (
                             <div className={styles.chatMessageStream} style={{ marginBottom: isLoading ? "40px" : "0px"}} role="log">

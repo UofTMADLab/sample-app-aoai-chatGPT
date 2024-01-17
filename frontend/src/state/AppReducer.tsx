@@ -4,6 +4,8 @@ import { Action, AppState } from './AppProvider';
 // Define the reducer function
 export const appStateReducer = (state: AppState, action: Action): AppState => {
     switch (action.type) {
+        case 'LTI_CONFIG':
+            return { ...state, ltiConfig: action.payload};
         case 'LTI_USER_INFO':
             return { ...state, ltiUserInfo: action.payload};
         case 'TOGGLE_CHAT_HISTORY':

@@ -66,17 +66,29 @@ def create_table(name, opts, port):
   # if table doesn't exist, create it
   if name not in [t.name for t in ddb.tables.all()]:
     print('Missing table...')
-    table = ddb.create_table(
-      TableName=name,
-      KeySchema=opts['key'],
-      AttributeDefinitions=opts['attrs'],
-      # provisioned throughput doesn't matter on local
-      ProvisionedThroughput={
-        'ReadCapacityUnits': 5,
-        'WriteCapacityUnits': 5
-      },
-      GlobalSecondaryIndexes=opts['gsindexes']
-    )
+    if opts['gsindexes']:
+      table = ddb.create_table(
+        TableName=name,
+        KeySchema=opts['key'],
+        AttributeDefinitions=opts['attrs'],
+        # provisioned throughput doesn't matter on local
+        ProvisionedThroughput={
+          'ReadCapacityUnits': 5,
+          'WriteCapacityUnits': 5
+        },
+        GlobalSecondaryIndexes=opts['gsindexes']
+      )
+    else:
+      table = ddb.create_table(
+        TableName=name,
+        KeySchema=opts['key'],
+        AttributeDefinitions=opts['attrs'],
+        # provisioned throughput doesn't matter on local
+        ProvisionedThroughput={
+          'ReadCapacityUnits': 5,
+          'WriteCapacityUnits': 5
+        }
+      )
     # wait until the table exists and print
     table.meta.client.get_waiter('table_exists').wait(TableName=name)
     print(f'Created table {table.name}.\n')
@@ -149,6 +161,21 @@ if __name__ == '__main__':
               }
           }
       ]
+    },
+    'aichat_users_dev': {
+      'key':   [{'AttributeName':'user_id', 'KeyType':'HASH'}, {'AttributeName':'qcontext', 'KeyType': 'RANGE'}],
+      'attrs': [
+                  {'AttributeName':'user_id', 'AttributeType':'S'},
+                  {'AttributeName':'qcontext', 'AttributeType':'S'}
+              ],
+      'gsindexes': None
+    },
+    'aichat_configurations_dev': {
+      'key':   [{'AttributeName':'qcontext', 'KeyType':'HASH'}],
+      'attrs': [
+                  {'AttributeName':'qcontext', 'AttributeType':'S'}
+              ],
+      'gsindexes': None
     },
   }
 

@@ -69,8 +69,10 @@ def get_lti_name(launch_data):
 def get_lti_course(launch_data):   
     return launch_data.get('https://purl.imsglobal.org/spec/lti/claim/context', {}).get('title', None)
 
+
 def get_lti_openai_context(launch_data):
     ai_context = {}
+    dynamic_config = {}
     
     lti_context =  get_lti_context(launch_data)
     name = get_lti_name(launch_data)
@@ -78,14 +80,20 @@ def get_lti_openai_context(launch_data):
     
     context_data = lti_course_config.get(lti_context, lti_course_config['default'])
     
-    ai_context['AZURE_SEARCH_SERVICE'] = context_data.get('AZURE_SEARCH_SERVICE', None)
-    ai_context['AZURE_SEARCH_INDEX'] = context_data.get('AZURE_SEARCH_INDEX', None)
+    if conversation_client:
+        resp = conversation_client.get_config(lti_context)
+        if resp:
+            dynamic_config = resp
+            
+    
+    ai_context['AZURE_SEARCH_SERVICE'] = dynamic_config.get('search_service', context_data.get('AZURE_SEARCH_SERVICE', None))
+    ai_context['AZURE_SEARCH_INDEX'] = dynamic_config.get('search_index', context_data.get('AZURE_SEARCH_INDEX', None))
     ai_context['AZURE_SEARCH_KEY'] = context_data.get('AZURE_SEARCH_KEY', None)
     ai_context['AZURE_OPENAI_KEY'] = os.environ.get(context_data.get('RESOURCE_KEY_ENV_ID', ""), None)
     ai_context['AZURE_OPENAI_RESOURCE'] = context_data.get('AZURE_OPENAI_RESOURCE', None)
-    ai_context['AZURE_OPENAI_MODEL'] = context_data.get('AZURE_OPENAI_MODEL', None)
-    ai_context['AZURE_OPENAI_SYSTEM_MESSAGE'] = context_data.get('AZURE_OPENAI_SYSTEM_MESSAGE', None).replace("{person}", name).replace("{course}", course)    
-    ai_context['AZURE_OPENAI_MODEL_NAME'] = context_data.get('AZURE_OPENAI_MODEL_NAME', "gpt-35-turbo-16k")
+    ai_context['AZURE_OPENAI_MODEL'] = dynamic_config.get('model', context_data.get('AZURE_OPENAI_MODEL', None))
+    ai_context['AZURE_OPENAI_SYSTEM_MESSAGE'] = dynamic_config.get('system_message',context_data.get('AZURE_OPENAI_SYSTEM_MESSAGE', None)).replace("{person}", name).replace("{course}", course)    
+    ai_context['AZURE_OPENAI_MODEL_NAME'] = dynamic_config.get('model_name',context_data.get('AZURE_OPENAI_MODEL_NAME', "gpt-35-turbo-16k"))
     return ai_context
     
 # Static Files
@@ -129,23 +137,17 @@ def launch():
     message_launch = FlaskMessageLaunch(flask_request, tool_conf, launch_data_storage=launch_data_storage)
     launch_id = message_launch.get_launch_id()
     message_launch_data = message_launch.get_launch_data()
-    # application.logger.info(pprint.pformat(message_launch_data))
 
-    # difficulty = message_launch_data.get('https://purl.imsglobal.org/spec/lti/claim/custom', {}) \
-    #     .get('difficulty', None)
-    # if not difficulty:
-    #     difficulty = request.args.get('difficulty', 'normal')
+    if conversation_client:
+        canvas_context = get_lti_context(message_launch_data)
+        user_id = get_lti_user_id(message_launch_data)
+        name = get_lti_name(message_launch_data)
+        course_title = get_lti_course(message_launch_data)
+        lti_role = "student-testing"
+        # create_or_update_user(self, canvas_context, user_id, name, course_title, lti_role):
+        resp = conversation_client.create_or_update_user(canvas_context, user_id, name, course_title, lti_role)
+        logging.exception(resp)        
 
-    # tpl_kwargs = {
-    #     'page_title': 'PAGE_TITLE',
-    #     'is_deep_link_launch': message_launch.is_deep_link_launch(),
-    #     'launch_data': message_launch.get_launch_data(),
-    #     'launch_id': message_launch.get_launch_id(),
-    #     'curr_user_name': message_launch_data.get('name', '')
-    #     # 'curr_diff': difficulty
-    # }
-    # return render_template('game.html', **tpl_kwargs)
-    # return application.send_static_file("index.html")
     resp = redirect(url_for('index'))
     if request.host.startswith("127.0.0.1"):
         resp.set_cookie('launch_id', launch_id)    
@@ -154,6 +156,39 @@ def launch():
         
     return resp
         
+@application.route("/lti/config")
+def lti_config_info():    
+    message_launch = get_message_launch()
+    if not message_launch:
+        raise Forbidden('Not authorized.')
+    
+    launch_data = message_launch.get_launch_data()
+    canvas_context = get_lti_context(launch_data)
+    lti_role = "student-test"
+    
+    dynamic_config = {}
+    resp = conversation_client.get_config(canvas_context)
+    if resp:
+        dynamic_config = resp
+    
+    result = {}
+    if lti_role == "instructor":
+        # include system message and other config parameters for instructors
+        result = dynamic_config
+        # set default welcome messages if they are not configured
+        result['welcome_message'] = dynamic_config.get('welcome_message', "Welcome")
+        result['welcome_image]'] = dynamic_config.get('welcome_image', "image.png"),
+        result['qcontext'] = canvas_context
+    else:   
+        # basic config for non-instructors     
+        result = {
+            'welcome_message':dynamic_config.get('welcome_message', "Welcome"),
+            'welcome_image':dynamic_config.get('welcome_image', "image.png"),    
+            'qcontext':canvas_context    
+        }
+    return jsonify(result), 200
+    
+    
 @application.route("/lti/me")
 def lti_id():
     message_launch = get_message_launch()
