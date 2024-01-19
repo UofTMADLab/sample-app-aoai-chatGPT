@@ -4,7 +4,7 @@ import Azure from "../../assets/Azure.svg";
 import { CopyRegular, ShareRegular } from "@fluentui/react-icons";
 import { CommandBarButton, Dialog, Stack, TextField, ICommandBarStyles, IButtonStyles, DefaultButton  } from "@fluentui/react";
 import { useContext, useEffect, useState } from "react";
-import { HistoryButton, ShareButton } from "../../components/common/Button";
+import { HistoryButton, ShareButton, SupervisorButton } from "../../components/common/Button";
 import { AppStateContext } from "../../state/AppProvider";
 import { CosmosDBStatus } from "../../api";
 
@@ -57,6 +57,10 @@ const Layout = () => {
     const handleHistoryClick = () => {
         appStateContext?.dispatch({ type: 'TOGGLE_CHAT_HISTORY' })
     };
+    
+    const handleSupervisorClick = () => {
+        appStateContext?.dispatch({ type: 'TOGGLE_SUPERVISOR_MODE' })
+    };
 
     useEffect(() => {
         if (copyClicked) {
@@ -80,13 +84,20 @@ const Layout = () => {
                         />
                         <Link to="/" className={styles.headerTitleContainer}>
                             <h1 className={styles.headerTitle}>Azure AI</h1>
-                        </Link>                        
+                        </Link>
+                        {
+                          (appStateContext?.state.ltiConfig?.role == 'instructor') && 
+                          <SupervisorButton onClick={handleSupervisorClick} text={appStateContext?.state?.isSupervisorModeOpen ? "Hide Supervisor Mode" : "Show Supervisor Mode"} />
+                          
+                        }                        
                     </Stack>
                     <Stack horizontal tokens={{ childrenGap: 4 }}>
                             {(appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured) && 
                                 <HistoryButton onClick={handleHistoryClick} text={appStateContext?.state?.isChatHistoryOpen ? "Hide chat history" : "Show chat history"}/>    
                             }
-                            {/* <ShareButton onClick={handleShareClick} /> */}
+                            
+                           
+                            {/* {<ShareButton onClick={handleShareClick} />} */}
                     </Stack>
 
                 </Stack>

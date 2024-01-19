@@ -20,10 +20,61 @@ export async function getLtiConfig(): Promise<LtiConfig> {
     const response = await fetch('/lti/config');
     if (!response.ok) {
         console.log("LTI config information not given.")
-        return {welcome_message: "", welcome_image: "", qcontext: ""};
+        return {welcome_message: "", welcome_image: "", qcontext: "", role: "student"};
     }
     const payload = await response.json();
     return payload;
+}
+
+
+export const welcomeMessageRename = async(message: string) : Promise<Response> => {
+    const response = await fetch("/lti/config/welcomeMessage", {
+        method: "POST",
+        body: JSON.stringify({
+            "welcome_message": message
+        }),
+        headers: {
+            "Content-Type": "application/json"
+        },
+    })
+    .then((res) => {
+        return res
+    })
+    .catch((err) => {
+        console.error("There was an issue fetching your data.");
+        let errRes: Response = {
+            ...new Response,
+            ok: false,
+            status: 500,
+        }
+        return errRes;
+    })
+    return response;
+}
+
+export const systemMessageUpdate = async(message: string) : Promise<Response> => {
+    const response = await fetch("/lti/config/systemMessage", {
+        method: "POST",
+        body: JSON.stringify({
+            "system_message": message
+        }),
+        headers: {
+            "Content-Type": "application/json"
+        },
+    })
+    .then((res) => {
+        return res
+    })
+    .catch((err) => {
+        console.error("There was an issue fetching your data.");
+        let errRes: Response = {
+            ...new Response,
+            ok: false,
+            status: 500,
+        }
+        return errRes;
+    })
+    return response;
 }
 
 export async function getLtiUserInfo(): Promise<LtiUserInfo[]> {

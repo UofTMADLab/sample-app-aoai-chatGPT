@@ -7,6 +7,7 @@ export interface AppState {
     ltiConfig: LtiConfig | null;
     ltiUserInfo: LtiUserInfo | null;
     isChatHistoryOpen: boolean;
+    isSupervisorModeOpen: boolean;
     chatHistoryLoadingState: ChatHistoryLoadingState;
     isCosmosDBAvailable: CosmosDBHealth;
     chatHistory: Conversation[] | null;
@@ -18,6 +19,9 @@ export type Action =
     | { type: 'LTI_CONFIG', payload: LtiConfig}
     | { type: 'LTI_USER_INFO', payload: LtiUserInfo}
     | { type: 'TOGGLE_CHAT_HISTORY' }
+    | { type: 'TOGGLE_SUPERVISOR_MODE' }
+    | { type: 'UPDATE_WELCOME_MESSAGE', payload: string }
+    | { type: 'UPDATE_SYSTEM_MESSAGE', payload: string }
     | { type: 'SET_COSMOSDB_STATUS', payload: CosmosDBHealth }
     | { type: 'UPDATE_CHAT_HISTORY_LOADING_STATE', payload: ChatHistoryLoadingState }
     | { type: 'UPDATE_CURRENT_CHAT', payload: Conversation | null }
@@ -33,6 +37,7 @@ const initialState: AppState = {
     ltiConfig: null,
     ltiUserInfo: null,
     isChatHistoryOpen: false,
+    isSupervisorModeOpen: false,
     chatHistoryLoadingState: ChatHistoryLoadingState.Loading,
     chatHistory: null,
     filteredChatHistory: null,

@@ -66,9 +66,14 @@ def get_lti_context(launch_data):
 def get_lti_name(launch_data):
     return launch_data.get('https://purl.imsglobal.org/spec/lti/claim/custom', {}).get('name', None)
     
+def get_lti_roles(launch_data):
+    return launch_data.get('https://purl.imsglobal.org/spec/lti/claim/roles', [])
+    
 def get_lti_course(launch_data):   
     return launch_data.get('https://purl.imsglobal.org/spec/lti/claim/context', {}).get('title', None)
 
+def get_role_is_instructor(roles):
+    return 'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor' in roles
 
 def get_lti_openai_context(launch_data):
     ai_context = {}
@@ -77,14 +82,22 @@ def get_lti_openai_context(launch_data):
     lti_context =  get_lti_context(launch_data)
     name = get_lti_name(launch_data)
     course = get_lti_course(launch_data)
+    user_id = get_lti_user_id(launch_data)
+    
+    ai_context['canvas_context'] = lti_context
+    ai_context['user_id'] = user_id
     
     context_data = lti_course_config.get(lti_context, lti_course_config['default'])
     
     if conversation_client:
-        resp = conversation_client.get_config(lti_context)
-        if resp:
-            dynamic_config = resp
+        remote_course_config = conversation_client.get_config(lti_context)
+        if remote_course_config:
+            dynamic_config = dynamic_config | remote_course_config
             
+        supervisor_panel_config = conversation_client.get_config(lti_context, user_id)        
+        if supervisor_panel_config:
+            dynamic_config = dynamic_config | supervisor_panel_config    
+    
     
     ai_context['AZURE_SEARCH_SERVICE'] = dynamic_config.get('search_service', context_data.get('AZURE_SEARCH_SERVICE', None))
     ai_context['AZURE_SEARCH_INDEX'] = dynamic_config.get('search_index', context_data.get('AZURE_SEARCH_INDEX', None))
@@ -94,6 +107,9 @@ def get_lti_openai_context(launch_data):
     ai_context['AZURE_OPENAI_MODEL'] = dynamic_config.get('model', context_data.get('AZURE_OPENAI_MODEL', None))
     ai_context['AZURE_OPENAI_SYSTEM_MESSAGE'] = dynamic_config.get('system_message',context_data.get('AZURE_OPENAI_SYSTEM_MESSAGE', None)).replace("{person}", name).replace("{course}", course)    
     ai_context['AZURE_OPENAI_MODEL_NAME'] = dynamic_config.get('model_name',context_data.get('AZURE_OPENAI_MODEL_NAME', "gpt-35-turbo-16k"))
+    
+    ai_context['USER_HISTORY_POLICY'] = dynamic_config.get('history_mode', context_data.get('USER_HISTORY_POLICY', "disabled"))
+    ai_context['STUDENT_ACCESS_ENABLED'] = dynamic_config.get('student_access', context_data.get('STUDENT_ACCESS_ENABLED', "disabled"))
     return ai_context
     
 # Static Files
@@ -143,11 +159,10 @@ def launch():
         user_id = get_lti_user_id(message_launch_data)
         name = get_lti_name(message_launch_data)
         course_title = get_lti_course(message_launch_data)
-        lti_role = "student-testing"
-        # create_or_update_user(self, canvas_context, user_id, name, course_title, lti_role):
-        resp = conversation_client.create_or_update_user(canvas_context, user_id, name, course_title, lti_role)
-        logging.exception(resp)        
+        lti_roles = get_lti_roles(message_launch_data)
 
+        resp = conversation_client.create_or_update_user(canvas_context, user_id, name, course_title, lti_roles)
+        logging.warning(resp)
     resp = redirect(url_for('index'))
     if request.host.startswith("127.0.0.1"):
         resp.set_cookie('launch_id', launch_id)    
@@ -164,30 +179,98 @@ def lti_config_info():
     
     launch_data = message_launch.get_launch_data()
     canvas_context = get_lti_context(launch_data)
-    lti_role = "student-test"
+    user_id = get_lti_user_id(launch_data)
+    lti_roles = get_lti_roles(launch_data)
     
-    dynamic_config = {}
-    resp = conversation_client.get_config(canvas_context)
-    if resp:
-        dynamic_config = resp
+    #get basic config from course-env.json
+    static_context_data = lti_course_config.get(canvas_context, lti_course_config['default'])
+    dynamic_config = {
+        'system_message': static_context_data.get('AZURE_OPENAI_SYSTEM_MESSAGE'),
+        'welcome_message': static_context_data.get('UI_WELCOME_MESSAGE', 'The AI Chat Bot is ready.'),
+        'welcome_image': static_context_data.get('UI_WELCOME_IMAGE', 'UofT'),
+        'model': static_context_data.get('AZURE_OPENAI_MODEL'),
+        'search_service': static_context_data.get('AZURE_SEARCH_SERVICE'),
+        'search_index': static_context_data.get('AZURE_SEARCH_INDEX'),
+        'history_mode': static_context_data.get('USER_HISTORY_POLICY', 'disabled'),
+        'student_access': static_context_data.get('STUDENT_ACCESS_ENABLED', 'disabled'),
+    }
+    #get published user_id=_default config from DB, overwrite static config if defined
+    remote_course_config = conversation_client.get_config(canvas_context)
+    if remote_course_config:
+        dynamic_config = dynamic_config | remote_course_config
     
     result = {}
-    if lti_role == "instructor":
+    if get_role_is_instructor(lti_roles):
+        #get personal supervisor config and overwrite published config if defined
+        supervisor_panel_config = conversation_client.get_config(canvas_context, user_id)
+        if supervisor_panel_config:
+            dynamic_config = dynamic_config | supervisor_panel_config
         # include system message and other config parameters for instructors
         result = dynamic_config
         # set default welcome messages if they are not configured
         result['welcome_message'] = dynamic_config.get('welcome_message', "The University of Toronto Chatbot is Ready to Answer Your Questions. Your chat history will be saved.")
         result['welcome_image]'] = dynamic_config.get('welcome_image', "image.png"),
+        result['role'] = 'instructor'
         result['qcontext'] = canvas_context
     else:   
         # basic config for non-instructors     
         result = {
             'welcome_message':dynamic_config.get('welcome_message', "The University of Toronto Chatbot is Ready to Answer Your Questions. Your chat history will be saved."),
-            'welcome_image':dynamic_config.get('welcome_image', "image.png"),    
+            'welcome_image':dynamic_config.get('welcome_image', "image.png"), 
+            'role':student,
             'qcontext':canvas_context    
         }
     return jsonify(result), 200
+
+@application.route("/lti/config/welcomeMessage",  methods=['POST'])    
+def lti_update_welcome_message():
+    message_launch = get_message_launch()
+    if not message_launch:
+        raise Forbidden('Not authorized.')
+    launch_data = message_launch.get_launch_data()
+    canvas_context = get_lti_context(launch_data)
+    user_id = get_lti_user_id(launch_data)
+    lti_roles = get_lti_roles(launch_data)
     
+    if not get_role_is_instructor(lti_roles):
+        raise Forbidden('Not authorized.')
+    
+    welcome_message = request.json.get("welcome_message", None)
+    
+    if not welcome_message:
+        return jsonify({"error": "welcome message parameter required" }), 400    
+        
+    resp = conversation_client.update_welcome_message_config(welcome_message, canvas_context, user_id)
+    
+    if resp:
+        return jsonify(resp), 200
+    else:
+        return jsonify({"error": "Could not update welcome message"}), 500    
+
+@application.route("/lti/config/systemMessage",  methods=['POST'])    
+def lti_update_system_message():
+    message_launch = get_message_launch()
+    if not message_launch:
+        raise Forbidden('Not authorized.')
+    launch_data = message_launch.get_launch_data()
+    canvas_context = get_lti_context(launch_data)
+    user_id = get_lti_user_id(launch_data)
+    lti_roles = get_lti_roles(launch_data)
+    
+    if not get_role_is_instructor(lti_roles):
+        raise Forbidden('Not authorized.')
+    
+    system_message = request.json.get("system_message", None)
+    
+    if not system_message:
+        return jsonify({"error": "system message parameter required" }), 400    
+        
+    resp = conversation_client.update_system_message_config(system_message, canvas_context, user_id)
+    
+    if resp:
+        return jsonify(resp), 200
+    else:
+        return jsonify({"error": "Could not update system message"}), 500        
     
 @application.route("/lti/me")
 def lti_id():
@@ -235,7 +318,7 @@ AZURE_OPENAI_TOP_P = os.environ.get("AZURE_OPENAI_TOP_P", 1.0)
 AZURE_OPENAI_MAX_TOKENS = os.environ.get("AZURE_OPENAI_MAX_TOKENS", 1000)
 AZURE_OPENAI_STOP_SEQUENCE = os.environ.get("AZURE_OPENAI_STOP_SEQUENCE")
 AZURE_OPENAI_PREVIEW_API_VERSION = os.environ.get("AZURE_OPENAI_PREVIEW_API_VERSION", "2023-08-01-preview")
-AZURE_OPENAI_STREAM = os.environ.get("AZURE_OPENAI_STREAM", "true")
+AZURE_OPENAI_STREAM = os.environ.get("AZURE_OPENAI_STREAM", "false")
 AZURE_OPENAI_EMBEDDING_ENDPOINT = os.environ.get("AZURE_OPENAI_EMBEDDING_ENDPOINT")
 AZURE_OPENAI_EMBEDDING_KEY = os.environ.get("AZURE_OPENAI_EMBEDDING_KEY")
 AZURE_OPENAI_EMBEDDING_NAME = os.environ.get("AZURE_OPENAI_EMBEDDING_NAME", "")
@@ -408,7 +491,7 @@ def stream_with_data(body, headers, endpoint, history_metadata={}):
                             lineJson = formatApiResponseStreaming(rawResponse)
                         except json.decoder.JSONDecodeError:
                             continue
-
+                    
                     if 'error' in lineJson:
                         yield format_as_ndjson(lineJson)
                     response["id"] = lineJson["id"]
@@ -436,6 +519,7 @@ def stream_with_data(body, headers, endpoint, history_metadata={}):
         yield format_as_ndjson({"error" + str(e)})
 
 def formatApiResponseNoStreaming(rawResponse):
+    
     if 'error' in rawResponse:
         return {"error": rawResponse["error"]}
     response = {
@@ -554,6 +638,8 @@ def stream_without_data(response, history_metadata={}):
 
 
 def conversation_without_data(request_body, ai_context):
+    canvas_context = ai_context['canvas_context']
+    user_id = ai_context['user_id']
     openai.api_type = "azure"
     openai.api_base = AZURE_OPENAI_ENDPOINT if AZURE_OPENAI_ENDPOINT else f"https://{ai_context['AZURE_OPENAI_RESOURCE']}.openai.azure.com/"
     openai.api_version = "2023-08-01-preview"
@@ -572,7 +658,7 @@ def conversation_without_data(request_body, ai_context):
             "role": message["role"] ,
             "content": message["content"]
         })
-
+    # https://platform.openai.com/docs/api-reference/chat/create
     response = openai.ChatCompletion.create(
         engine=ai_context['AZURE_OPENAI_MODEL'],
         messages = messages,
@@ -582,10 +668,13 @@ def conversation_without_data(request_body, ai_context):
         stop=AZURE_OPENAI_STOP_SEQUENCE.split("|") if AZURE_OPENAI_STOP_SEQUENCE else None,
         stream=SHOULD_STREAM
     )
-
+    
     history_metadata = request_body.get("history_metadata", {})
-
-    if not SHOULD_STREAM:
+    if not SHOULD_STREAM:   
+        token_count = response.get("usage", {}).get("total_tokens", 0)   
+        if not conversation_client.increment_user_token_count(canvas_context, user_id, token_count):
+            logging.warning("Failed to update token count.")
+            
         response_obj = {
             "id": response,
             "model": response.model,

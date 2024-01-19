@@ -170,10 +170,11 @@ if __name__ == '__main__':
               ],
       'gsindexes': None
     },
-    'aichat_configurations_dev': {
-      'key':   [{'AttributeName':'qcontext', 'KeyType':'HASH'}],
+    'aichat_all_configs_dev': {
+      'key':   [{'AttributeName':'qcontext', 'KeyType':'HASH'}, {'AttributeName':'user_id_or_default', 'KeyType': 'RANGE'}],
       'attrs': [
-                  {'AttributeName':'qcontext', 'AttributeType':'S'}
+                  {'AttributeName':'qcontext', 'AttributeType':'S'},
+                  {'AttributeName':'user_id_or_default', 'AttributeType':'S'}
               ],
       'gsindexes': None
     },

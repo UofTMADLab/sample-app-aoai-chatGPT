@@ -10,6 +10,8 @@ export const appStateReducer = (state: AppState, action: Action): AppState => {
             return { ...state, ltiUserInfo: action.payload};
         case 'TOGGLE_CHAT_HISTORY':
             return { ...state, isChatHistoryOpen: !state.isChatHistoryOpen };
+        case 'TOGGLE_SUPERVISOR_MODE':
+            return { ...state, isSupervisorModeOpen: !state.isSupervisorModeOpen };
         case 'UPDATE_CURRENT_CHAT':
             return { ...state, currentChat: action.payload };
         case 'UPDATE_CHAT_HISTORY_LOADING_STATE':
@@ -26,6 +28,19 @@ export const appStateReducer = (state: AppState, action: Action): AppState => {
             } else {
                 return { ...state, chatHistory: [...state.chatHistory, action.payload] };
             }
+            
+        case 'UPDATE_WELCOME_MESSAGE':
+            if (!state.ltiConfig) {
+                return state;
+            }
+            let updatedConfig = { ...state.ltiConfig, welcome_message: action.payload };
+            return { ...state, ltiConfig: updatedConfig};            
+        case 'UPDATE_SYSTEM_MESSAGE':
+            if (!state.ltiConfig) {
+                return state;
+            }
+            let updatedSystemConfig = { ...state.ltiConfig, system_message: action.payload };
+            return { ...state, ltiConfig: updatedSystemConfig};
         case 'UPDATE_CHAT_TITLE':
             if(!state.chatHistory){
                 return { ...state, chatHistory: [] };

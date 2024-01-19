@@ -6,6 +6,7 @@ export type LtiUserInfo = {
 export type LtiConfig = {
     welcome_message: string;
     welcome_image: string;
+    role: string;
     qcontext: string;
     system_message?: string;
     model?: string;

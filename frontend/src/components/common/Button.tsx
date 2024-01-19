@@ -68,3 +68,32 @@ export const HistoryButton: React.FC<HistoryButtonProps> = ({onClick, text}) => 
         />
       )
 }
+
+interface SupervisorButtonProps extends IButtonProps {
+  onClick: () => void;
+  text: string;
+}
+
+export const SupervisorButton: React.FC<SupervisorButtonProps> = ({onClick, text}) => {
+    const historyButtonStyles: ICommandBarStyles & IButtonStyles = {
+        root: {
+            width: '180px',
+            border: `1px solid #D1D1D1`,
+          },
+          rootHovered: {
+            border: `1px solid #D1D1D1`,
+          },
+          rootPressed: {
+            border: `1px solid #D1D1D1`,
+          },
+      };
+
+      return (
+        <DefaultButton
+            text={text}
+            iconProps={{ iconName: 'Edit' }}
+            onClick={onClick}
+            styles={historyButtonStyles}
+        />
+      )
+}

@@ -23,7 +23,7 @@ class DynamoDBConversationClient():
         self.conversations_table = self.dynamodb_client.Table(f'aichat_conversations_{os.environ.get("AWS_DDB_ENV","dev")}')
         self.messages_table = self.dynamodb_client.Table(f'aichat_messages_{os.environ.get("AWS_DDB_EN","dev")}')
         self.users_table = self.dynamodb_client.Table(f'aichat_users_{os.environ.get("AWS_DDB_EN","dev")}')
-        self.config_table = self.dynamodb_client.Table(f'aichat_configurations_{os.environ.get("AWS_DDB_EN","dev")}')
+        self.config_table = self.dynamodb_client.Table(f'aichat_all_configs_{os.environ.get("AWS_DDB_EN","dev")}')
         
     def ensure(self):
         try:
@@ -80,9 +80,10 @@ class DynamoDBConversationClient():
     def _get_message_id_from_frontend_message(self, message):
         return message['id']
     
-    def get_config(self, canvas_context):
+    def get_config(self, canvas_context, user_id="_default"):
         key = {
-            'qcontext': canvas_context
+            'qcontext': canvas_context,
+            'user_id_or_default': user_id
         }
         try:
             
@@ -92,7 +93,64 @@ class DynamoDBConversationClient():
             return resp['Item']
         except:
             return None
+    
+    def create_config(self, config, canvas_context, user_id="_default"):
+        config['qcontext'] = canvas_context
+        config['user_id_or_default'] = user_id
         
+        try:
+            resp = self.config_table.put_item(
+                Item=config,
+                ReturnValues="NONE",
+            )
+            return config
+        except:
+            return False
+            
+    def update_welcome_message_config(self, welcome_message, canvas_context, user_id="_default"):
+        config = {
+            'qcontext': canvas_context,
+            "user_id_or_default": user_id,
+            "welcome_message": welcome_message
+        }
+        try:
+            resp = self.config_table.update_item(
+                Key={
+                    'qcontext': config['qcontext'],
+                    'user_id_or_default':config['user_id_or_default']
+                },
+                ReturnValues='ALL_NEW',
+                UpdateExpression="SET welcome_message=:welcome_message",
+                ExpressionAttributeValues={
+                    ":welcome_message":config["welcome_message"]
+                }
+            )
+            return resp["Attributes"]
+        except:
+            return False
+    
+    def update_system_message_config(self, system_message, canvas_context, user_id="_default"):
+        config = {
+            'qcontext': canvas_context,
+            "user_id_or_default": user_id,
+            "system_message": system_message
+        }
+        try:
+            resp = self.config_table.update_item(
+                Key={
+                    'qcontext': config['qcontext'],
+                    'user_id_or_default':config['user_id_or_default']
+                },
+                ReturnValues='ALL_NEW',
+                UpdateExpression="SET system_message=:system_message",
+                ExpressionAttributeValues={
+                    ":system_message":config["system_message"]
+                }
+            )
+            return resp["Attributes"]
+        except:
+            return False
+                 
     def create_or_update_user(self, canvas_context, user_id, name, course_title, lti_role):
         user = {
             'user_id': user_id,
@@ -103,26 +161,49 @@ class DynamoDBConversationClient():
             'lti_role': lti_role,
         }
         
-        # try:
-        resp = self.users_table.update_item(
-            Key={
-                'user_id':user['user_id'],
-                'qcontext':user['qcontext']
-            },
-            ReturnValues="ALL_NEW",
-            UpdateExpression="SET lti_name=:name, course_title=:course_title, lti_role=:lti_role, sessions = list_append(if_not_exists(sessions, :empty_list), :sessions)",
-            ExpressionAttributeValues={
-                ":name":user['lti_name'],
-                ":course_title":user['course_title'],
-                ":lti_role":user['lti_role'],   
-                ":empty_list":[],             
-                ":sessions":user['sessions']
-            }
-        )
-        return resp['Attributes']
-        # except:
-        #     return False
-        
+        try:
+            resp = self.users_table.update_item(
+                Key={
+                    'user_id':user['user_id'],
+                    'qcontext':user['qcontext']
+                },
+                ReturnValues="ALL_NEW",
+                # UpdateExpression="SET lti_name=:name, course_title=:course_title, lti_role=:lti_role, sessions = list_append(if_not_exists(sessions, :empty_list), :sessions)",
+                # ExpressionAttributeValues={
+                #     ":name":user['lti_name'],
+                #     ":course_title":user['course_title'],
+                #     ":lti_role":user['lti_role'],   
+                #     ":empty_list":[],             
+                #     ":sessions":user['sessions']
+                # }
+                UpdateExpression="SET lti_name=:name, course_title=:course_title, lti_role=:lti_role",
+                ExpressionAttributeValues={
+                    ":name":user['lti_name'],
+                    ":course_title":user['course_title'],
+                    ":lti_role":user['lti_role']
+                }
+            )
+            return resp['Attributes']
+        except:
+            return False
+    
+    def increment_user_token_count(self, canvas_context, user_id, token_count):
+        try:
+            resp = self.users_table.update_item(
+                Key={
+                    'user_id':user_id,
+                    'qcontext':canvas_context
+                },
+                ReturnValues="ALL_NEW",
+                UpdateExpression="ADD token_count :token_count",
+                ExpressionAttributeValues={
+                    ":token_count":token_count
+                }
+            )
+            return resp['Attributes']
+        except:
+            return False
+            
     def create_conversation(self, canvas_context, user_id, title = ''):
         conversation = {
             'qcontext_user_id': f'{canvas_context}#{user_id}',
