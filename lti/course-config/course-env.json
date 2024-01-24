@@ -18,6 +18,15 @@
 		
 	},
 	"b82229c6e10bcb87beb1f1b287faee560ddc3109": {
+		"COPILOT_STUDIO_TOKEN_ENDPOINT": "https://default26fec82afef145d99d67a5616783d7.46.environment.api.powerplatform.com/powervirtualagents/botsbyschema/crdc1_mwsFirstCopilot/directline/token?api-version=2022-03-01-preview",		
+		"RESOURCE_KEY_ENV_ID":"UOFT_OAI_CA",
+		"AZURE_OPENAI_RESOURCE":"uoftopenai-ca",
+		"AZURE_OPENAI_MODEL": "mws-local-dev",
+		"AZURE_OPENAI_MODEL_NAME": "gpt-35-turbo",
+		"AZURE_OPENAI_SYSTEM_MESSAGE": "You are an AI assistant at the University of Toronto that helps undergraduate students. Students may ask you to produce information in sentences, creating lists, or by creating sample quiz questions. Answers provided should be in friendly, simple language and not exceed 400 words. The name of the person you are helping is {person}. They are in a course named {course}."
+	},
+	"f97330a96452fc363a34e0ef6d8d0d3e9e1007d2": {
+		"COPILOT_STUDIO_TOKEN_ENDPOINT": "https://default26fec82afef145d99d67a5616783d7.46.environment.api.powerplatform.com/powervirtualagents/botsbyschema/crdc1_mwsFirstCopilot/directline/token?api-version=2022-03-01-preview",		
 		"RESOURCE_KEY_ENV_ID":"UOFT_OAI_CA",
 		"AZURE_OPENAI_RESOURCE":"uoftopenai-ca",
 		"AZURE_OPENAI_MODEL": "mws-local-dev",

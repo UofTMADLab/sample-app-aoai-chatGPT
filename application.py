@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from backend.auth.auth_utils import get_authenticated_user_details
 # from backend.history.cosmosdbservice import CosmosConversationClient
 from backend.history.DynamoDBConversationClient import DynamoDBConversationClient
+from backend.engine.DirectLine import DirectLineEngine
 
 from werkzeug.exceptions import Forbidden
 from pylti1p3.contrib.flask import FlaskOIDCLogin, FlaskMessageLaunch, FlaskRequest, FlaskCacheDataStorage
@@ -98,7 +99,7 @@ def get_lti_openai_context(launch_data):
         if supervisor_panel_config:
             dynamic_config = dynamic_config | supervisor_panel_config    
     
-    
+    ai_context['COPILOT_STUDIO_TOKEN_ENDPOINT'] = dynamic_config.get('copilot_studio_token_endpoint', context_data.get('COPILOT_STUDIO_TOKEN_ENDPOINT', None))
     ai_context['AZURE_SEARCH_SERVICE'] = dynamic_config.get('search_service', context_data.get('AZURE_SEARCH_SERVICE', None))
     ai_context['AZURE_SEARCH_INDEX'] = dynamic_config.get('search_index', context_data.get('AZURE_SEARCH_INDEX', None))
     ai_context['AZURE_SEARCH_KEY'] = context_data.get('AZURE_SEARCH_KEY', None)
@@ -354,6 +355,11 @@ SHOULD_STREAM = True if AZURE_OPENAI_STREAM.lower() == "true" else False
 
 def should_use_data(ai_context):
     if ai_context['AZURE_SEARCH_SERVICE'] and ai_context['AZURE_SEARCH_INDEX'] and ai_context['AZURE_SEARCH_KEY']:
+        return True
+    return False
+    
+def should_use_copilot(ai_context):
+    if ai_context['COPILOT_STUDIO_TOKEN_ENDPOINT']:
         return True
     return False
 
@@ -636,7 +642,50 @@ def stream_without_data(response, history_metadata={}):
         }
         yield format_as_ndjson(response_obj)
 
-
+def conversation_with_copilot(request_body, ai_context):
+    dl_client = DirectLineEngine(ai_context['COPILOT_STUDIO_TOKEN_ENDPOINT'])
+    request_messages = request_body["messages"]
+    request_token = request_body.get("direct_token", None)
+    request_conversation = request_body.get("direct_conversation", None)
+    history_metadata = request_body.get("history_metadata", {})
+    
+    message_text = request_messages[-1]["content"]
+    
+    if not request_conversation:
+        request_token, request_conversation = dl_client.get_token()
+        if request_token:
+            r = dl_client.create_conversation(request_token)
+            if not r:
+                return jsonify({"error": "Could not create conversation."}), 500
+    
+    send_result = dl_client.send_activity(request_token, request_conversation, message_text)
+    if not send_result:
+        return jsonify({"error": "Could not send activity."}), 500
+    
+    get_result = dl_client.get_activity(request_token, request_conversation)
+    if not get_result:
+        return jsonify({"error": "Error getting activity result."}), 500
+    
+    result_activity = get_result["activities"][-1]
+    response_obj = {
+        "id": result_activity["id"],
+        "model": result_activity["from"]["name"],
+        "created": result_activity["timestamp"],
+        "object": "chat.completion",
+        "choices": [{
+            "messages": [{
+                "role": "assistant",
+                "content": result_activity["text"]
+            }]
+        }],
+        "history_metadata": history_metadata,
+        "directline_token": request_token,
+        "directline_conversation": request_conversation
+    }
+    
+    return jsonify(response_obj), 200  
+    
+    
 def conversation_without_data(request_body, ai_context):
     canvas_context = ai_context['canvas_context']
     user_id = ai_context['user_id']
@@ -708,11 +757,15 @@ def conversation():
 
 def conversation_internal(request_body, ai_context):
     try:
+        use_copilot = should_use_copilot(ai_context)
         use_data = should_use_data(ai_context)
+        if use_copilot:
+            return conversation_with_copilot(request_body, ai_context)
+            
         if use_data:
             return conversation_with_data(request_body, ai_context)
-        else:
-            return conversation_without_data(request_body, ai_context)
+        
+        return conversation_without_data(request_body, ai_context)
     except Exception as e:
         logging.exception("Exception in /conversation")
         return jsonify({"error": str(e)}), 500
@@ -997,6 +1050,20 @@ def ensure_ddb():
     # if not AZURE_COSMOSDB_ACCOUNT:
     #     return jsonify({"error": "CosmosDB is not configured"}), 404
     # 
+    message_launch = get_message_launch()
+    if not message_launch:
+        raise Forbidden('Not authorized.')
+        
+    launch_data = message_launch.get_launch_data()
+    
+    ai_context = get_lti_openai_context(launch_data)
+    
+    if ai_context["USER_HISTORY_POLICY"] == "disabled":
+        return jsonify({"error": "Chat history is disabled in this context."}), 500
+        
+    if should_use_copilot(ai_context):
+        return jsonify({"error": "Chat history not enabled for copilot chats."}), 500
+        
     if not conversation_client or conversation_client.ensure() != True:
         return jsonify({"error": "Chat history database is not working"}), 500
 
