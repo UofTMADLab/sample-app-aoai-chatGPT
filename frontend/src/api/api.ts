@@ -8,7 +8,10 @@ export async function conversationApi(options: ConversationRequest, abortSignal:
             "Content-Type": "application/json"
         },
         body: JSON.stringify({
-            messages: options.messages
+            messages: options.messages,
+            directline_token: options.directline_token,
+            directline_conversation: options.directline_conversation,
+            directline_watermark: options.directline_watermark
         }),
         signal: abortSignal
     });
@@ -182,11 +185,17 @@ export const historyGenerate = async (options: ConversationRequest, abortSignal:
     if(convId){
         body = JSON.stringify({
             conversation_id: convId,
-            messages: options.messages
+            messages: options.messages,
+            directline_token: options.directline_token,
+            directline_conversation: options.directline_conversation,
+            directline_watermark: options.directline_watermark
         })
     }else{
         body = JSON.stringify({
-            messages: options.messages
+            messages: options.messages,
+            directline_token: options.directline_token,
+            directline_conversation: options.directline_conversation,
+            directline_watermark: options.directline_watermark
         })
     }
     const response = await fetch("/history/generate", {

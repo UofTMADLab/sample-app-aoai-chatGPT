@@ -149,7 +149,10 @@ const Chat = () => {
         setMessages(conversation.messages)
         
         const request: ConversationRequest = {
-            messages: [...conversation.messages.filter((answer) => answer.role !== "error")]
+            messages: [...conversation.messages.filter((answer) => answer.role !== "error")],
+            directline_token: conversation.directline_token,
+            directline_conversation: conversation.directline_conversation,
+            directline_watermark: conversation.directline_watermark
             // messages: [...conversation.messages.filter((answer) => answer.role === "error")]
         };
 
@@ -186,7 +189,10 @@ const Chat = () => {
                         catch { }
                     });
                 }
-                conversation.messages.push(...result.choices[0].messages)
+                conversation.messages.push(...result.choices[0].messages);
+                conversation.directline_conversation = result.directline_conversation;
+                conversation.directline_token = result.directline_token;
+                conversation.directline_watermark = result.directline_watermark;
                 appStateContext?.dispatch({ type: 'UPDATE_CURRENT_CHAT', payload: conversation });
                 setMessages([...messages, ...result.choices[0].messages]);
             }

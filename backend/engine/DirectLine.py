@@ -74,6 +74,7 @@ class DirectLineEngine():
 		}
 		try:
 			r = requests.post(url, headers=headers, json=body)
+			logging.warning(r.text)
 			if r.status_code == 200:
 				return r.json()["id"]
 			else:
@@ -85,7 +86,7 @@ class DirectLineEngine():
 			return False
 		
 			
-	def get_activity(self, token, conversationId, watermark=False):
+	def get_activity(self, token, conversationId, watermark=None):
 		url = f"{self.conversations_endpoint}/{conversationId}/activities"
 		headers = {
 			'Authorization': f'Bearer {token}'

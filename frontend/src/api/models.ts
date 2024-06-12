@@ -51,6 +51,9 @@ export type Conversation = {
     title: string;
     messages: ChatMessage[];
     date: string;
+    directline_token?: string;
+    directline_conversation?: string;
+    directline_watermark?: string;
 }
 
 export enum ChatCompletionType {
@@ -74,10 +77,16 @@ export type ChatResponse = {
         date: string;
     }
     error?: any;
+    directline_token?: string;
+    directline_conversation?: string;
+    directline_watermark?: string;
 }
 
 export type ConversationRequest = {
     messages: ChatMessage[];
+    directline_token?: string;
+    directline_conversation?: string;
+    directline_watermark?: string
 };
 
 export type UserInfo = {

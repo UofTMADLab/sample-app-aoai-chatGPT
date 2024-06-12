@@ -1,4 +1,5 @@
 import json
+import time
 import os
 import logging
 import requests
@@ -645,28 +646,66 @@ def stream_without_data(response, history_metadata={}):
 def conversation_with_copilot(request_body, ai_context):
     dl_client = DirectLineEngine(ai_context['COPILOT_STUDIO_TOKEN_ENDPOINT'])
     request_messages = request_body["messages"]
-    request_token = request_body.get("direct_token", None)
-    request_conversation = request_body.get("direct_conversation", None)
+    request_token = request_body.get("directline_token", None)
+    request_conversation = request_body.get("directline_conversation", None)
+    request_watermark = request_body.get("directline_watermark", None)
     history_metadata = request_body.get("history_metadata", {})
     
     message_text = request_messages[-1]["content"]
-    
+    logging.warning(request_body)
     if not request_conversation:
         request_token, request_conversation = dl_client.get_token()
         if request_token:
             r = dl_client.create_conversation(request_token)
             if not r:
                 return jsonify({"error": "Could not create conversation."}), 500
-    
+        else:
+            jsonify({"error": "Could not get token."}), 500
+    logging.warning(f"request conversation: {request_conversation}") 
     send_result = dl_client.send_activity(request_token, request_conversation, message_text)
     if not send_result:
         return jsonify({"error": "Could not send activity."}), 500
     
-    get_result = dl_client.get_activity(request_token, request_conversation)
-    if not get_result:
-        return jsonify({"error": "Error getting activity result."}), 500
-    
-    result_activity = get_result["activities"][-1]
+    result_activity = None
+    watermark = request_watermark
+    max_requests = 5
+    request_count = 0
+    time.sleep(2.0)
+    while(True):
+        #throttle as recommended by api docs
+        logging.warning("GETTING")
+        get_result = dl_client.get_activity(request_token, request_conversation, watermark=watermark)
+        logging.warning(get_result)
+        if not get_result:
+            break
+        activities = get_result.get("activities", None)
+        if activities is None:
+            return jsonify({"error": "Error getting activity result. Empty activities."}), 500
+        # no more paged results when activites is empty
+        if len(activities) == 0:
+            break
+        
+        #get latest "message" activity    
+        for activity in activities:
+            if activity.get("type", "unknown") == "message" and activity["from"].get("name", None): 
+                result_activity = activity
+        # get current watermark, to request next page
+        watermark = get_result.get("watermark", None)
+        if not watermark:
+            break
+        # make a limit on possible requests
+        request_count += 1
+        if request_count >= max_requests:
+            break
+        time.sleep(1.0)
+        
+    if not result_activity:
+        return jsonify({"error": "Error getting activity result. No result returned."}), 500
+        
+    # most recent result was not from the bot
+    if result_activity["from"].get("name", None) is None: 
+        return jsonify({"error": "Please rephrase your request."}), 500
+        
     response_obj = {
         "id": result_activity["id"],
         "model": result_activity["from"]["name"],
@@ -680,7 +719,8 @@ def conversation_with_copilot(request_body, ai_context):
         }],
         "history_metadata": history_metadata,
         "directline_token": request_token,
-        "directline_conversation": request_conversation
+        "directline_conversation": request_conversation,
+        "directline_watermark": watermark
     }
     
     return jsonify(response_obj), 200  
